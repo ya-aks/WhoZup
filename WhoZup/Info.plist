@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.1009092925495-p8ser3254j53cnt5flsrpra5c8kd8mht</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>app.whozup.invite</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>whozup</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>WhoZup schedules alarms on this device so your group can see when you wake up.</string>
+</dict>
+</plist>

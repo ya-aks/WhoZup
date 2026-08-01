@@ -1,0 +1,19 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["F58J28V895.Akshay.WhoZup"],
+        "components": [
+          {
+            "/": "/join",
+            "comment": "Group invite link — opens the join confirmation sheet"
+          },
+          {
+            "/": "/join/*",
+            "comment": "Group invite link with a path-style code"
+          }
+        ]
+      }
+    ]
+  }
+}

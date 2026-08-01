@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>You're invited — whoZup</title>
+<style>
+  :root {
+    --canvas: #faf6ed;
+    --card: #fffdf8;
+    --border: #e8dfcc;
+    --ink: #2f2a22;
+    --ink-muted: #7d7362;
+    --ink-faint: #b1a892;
+    --accent: #d98c3a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    background: var(--canvas);
+    color: var(--ink);
+    font: 400 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 32px 24px 28px;
+    text-align: center;
+  }
+  .wordmark { font-size: 22px; font-weight: 800; letter-spacing: -0.4px; margin-bottom: 28px; }
+  .wordmark span { color: var(--accent); }
+  .eyebrow { font-size: 13.5px; font-weight: 600; color: var(--ink-muted); margin: 0 0 6px; }
+  h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.6px; margin: 0 0 8px; }
+  .meta { font-size: 14.5px; font-weight: 500; color: var(--ink-muted); margin: 0 0 24px; }
+  .code-label { font-size: 12px; font-weight: 700; color: var(--ink-faint); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .code {
+    font: 800 30px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 6px; color: var(--accent); margin-bottom: 4px;
+  }
+  .code-hint { font-size: 12.5px; color: var(--ink-faint); min-height: 18px; margin-bottom: 22px; }
+  .btn {
+    display: block; width: 100%; padding: 15px 18px; margin-bottom: 10px;
+    border: 0; border-radius: 15px; cursor: pointer;
+    font: 700 15.5px/1 inherit; text-decoration: none;
+    background: var(--accent); color: #fff;
+  }
+  .btn.secondary { background: rgba(217, 140, 58, 0.12); color: var(--accent); }
+  .btn.tertiary { background: transparent; color: var(--ink-muted); font-weight: 600; padding: 12px; }
+  .steps { text-align: left; font-size: 13.5px; color: var(--ink-muted); margin: 22px 0 0; padding-left: 20px; }
+  .steps li { margin-bottom: 5px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="wordmark">who<span>Z</span>up</div>
+
+  <p class="eyebrow" id="eyebrow">You've been invited to</p>
+  <h1 id="group-name">a whoZup group</h1>
+  <p class="meta" id="meta"></p>
+
+  <div class="code-label">Invite code</div>
+  <div class="code" id="code">——————</div>
+  <div class="code-hint" id="code-hint"></div>
+
+  <a class="btn" id="open-app" href="#">Open in whoZup</a>
+  <a class="btn secondary" id="get-app" href="#">Get whoZup on TestFlight</a>
+  <button class="btn tertiary" id="copy">Copy invite code</button>
+
+  <ol class="steps">
+    <li>Install whoZup from TestFlight.</li>
+    <li>Sign in — any method works.</li>
+    <li>Tap <strong>Join by code</strong> and paste the code above.</li>
+  </ol>
+</div>
+
+<script>
+// TODO: replace with your public TestFlight link, e.g.
+// https://testflight.apple.com/join/XXXXXXXX
+var TESTFLIGHT_URL = "https://testflight.apple.com/";
+
+var params = new URLSearchParams(location.search);
+var code = (params.get("code") || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+var groupName = params.get("g");
+var invitedBy = params.get("by");
+
+if (groupName) document.getElementById("group-name").textContent = groupName;
+if (invitedBy) {
+  document.getElementById("meta").textContent = "Invited by " + invitedBy;
+}
+if (code) document.getElementById("code").textContent = code;
+
+document.getElementById("get-app").href = TESTFLIGHT_URL;
+
+// If the app is installed, the Universal Link opens it directly and this page
+// is never seen. This button is the manual retry for the case where the user
+// arrived here from a browser (e.g. scanned the QR) — a browser won't hand its
+// own https navigation back to the app, so use the custom scheme, which does
+// open the installed app. Falls back to the https link if there's no code.
+document.getElementById("open-app").href =
+  code ? ("whozup://join?code=" + code) : location.href;
+
+// Pre-stage the code on the clipboard so the app's paste button can pick it up
+// without the user typing anything. Silently ignored where the browser blocks
+// clipboard access without a gesture — the explicit button below still works.
+function copyCode(announce) {
+  if (!code || !navigator.clipboard) return;
+  navigator.clipboard.writeText(code).then(function () {
+    if (announce) {
+      document.getElementById("code-hint").textContent = "Copied — paste it in the app";
+    }
+  }, function () {});
+}
+copyCode(false);
+document.getElementById("copy").addEventListener("click", function () { copyCode(true); });
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "app.whozup.android",
+      "sha256_cert_fingerprints": [
+        "F4:CB:CD:84:9C:6E:95:05:0F:74:F0:AE:7A:9C:E6:8E:31:E0:9F:5C:62:9E:0D:18:E8:B1:F6:78:1E:FE:93:C7"
+      ]
+    }
+  }
+]

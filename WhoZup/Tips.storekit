@@ -1,0 +1,80 @@
+{
+  "identifier" : "12B6A1B0-0000-4000-8000-000000000001",
+  "nonRenewingSubscriptions" : [],
+  "products" : [
+    {
+      "displayPrice" : "1.99",
+      "familyShareable" : false,
+      "internalID" : "0000000000001",
+      "localizations" : [
+        {
+          "description" : "A small tip to support WhoZup",
+          "displayName" : "Small Tip",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.whozup.tip.small",
+      "referenceName" : "Small Tip",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "0000000000002",
+      "localizations" : [
+        {
+          "description" : "A medium tip to support WhoZup",
+          "displayName" : "Medium Tip",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.whozup.tip.medium",
+      "referenceName" : "Medium Tip",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "0000000000003",
+      "localizations" : [
+        {
+          "description" : "A large tip to support WhoZup",
+          "displayName" : "Large Tip",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.whozup.tip.large",
+      "referenceName" : "Large Tip",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "0000000000004",
+      "localizations" : [
+        {
+          "description" : "20 Additional Event/Coordination Polls",
+          "displayName" : "Event Pack (20)",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.whozup.eventpack.20",
+      "referenceName" : "Event Pack (20)",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "0000000000",
+    "_developerTeamID" : "0000000000",
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 0,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

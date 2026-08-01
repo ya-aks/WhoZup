@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>1009092925495-p8ser3254j53cnt5flsrpra5c8kd8mht.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.1009092925495-p8ser3254j53cnt5flsrpra5c8kd8mht</string>
+	<key>API_KEY</key>
+	<string>AIzaSyDUSk8kcffHFPhst2imPtLFcVi10LLevEg</string>
+	<key>GCM_SENDER_ID</key>
+	<string>1009092925495</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>Akshay.WhoZup</string>
+	<key>PROJECT_ID</key>
+	<string>whozup-725a6</string>
+	<key>STORAGE_BUCKET</key>
+	<string>whozup-725a6.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:1009092925495:ios:64407bfa63d1c37e95c7b2</string>
+</dict>
+</plist>

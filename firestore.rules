@@ -1,0 +1,357 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+//   Doc ID: owner's Auth UID. Fields: displayName (req, 1-50),
+//   email? (valid email), phoneNumber? (5-20), createdAt (req, immutable).
+//   Contains PII → owner-only read.
+//
+// Collection: groups
+//   Doc ID: auto. Fields:
+//     - type: 'accountability' | 'shared' | 'event' (req, immutable)
+//     - name: string (req, 1-60)
+//     - adminUids: list<string> (req, >=1, all also in memberUids) — group admins
+//     - memberUids: list<string> (req, <=100) — used to query "my groups"
+//     - inviteCode: string (req, immutable, 4-12)
+//     - createdAt: timestamp (req, immutable)
+//     - alarmTime: string? ("H:MM", shared group-level wake-up)
+//     - lateThresholdMinutes: number? (1-120)
+//     - eventTitle: string? (event, <=120)
+//     - eventPlace: string? (event, <=160)
+//   Sub: groups/{gid}/members/{uid} — displayName, initials, avatarColorHex, role, alarmTime?
+//   Sub: groups/{gid}/statuses/{uid} — status(enum), detail(<=120), eta?(<=20), updatedAt
+//   Sub: groups/{gid}/activity/{id} — kind, message(<=160), actorUid, createdAt (append-only feed)
+//
+// Collection: invites
+//   Doc ID: inviteCode. Fields: groupId (req), groupName (<=60), createdBy, asAdmin?(bool).
+//   Readable by any signed-in user so an invite code can be resolved to a group.
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------- Helpers ----------------
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.size() <= 320 &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isRecent(time) {
+      return time is timestamp &&
+        time > request.time - duration.value(5, 'm') &&
+        time <= request.time;
+    }
+
+    function groupData(groupId) {
+      return get(/databases/$(database)/documents/groups/$(groupId)).data;
+    }
+
+    // The admin list, tolerant of legacy groups that predate the field or were
+    // seeded without it — those come back as an empty list rather than erroring.
+    // A group with an empty admin list is "admin-less": any member may leave or
+    // delete it, since there is no admin left to manage it.
+    function adminsOf(data) {
+      return data.get('adminUids', []);
+    }
+
+    function isGroupMember(groupId) {
+      return isAuthenticated() &&
+        request.auth.uid in groupData(groupId).memberUids;
+    }
+
+    // ---------------- users (PII, owner-only) ----------------
+
+    function isValidUser(data) {
+      return data.keys().hasOnly(['displayName', 'email', 'phoneNumber', 'createdAt']) &&
+        data.displayName is string &&
+        data.displayName.size() >= 1 && data.displayName.size() <= 50 &&
+        (!('email' in data) || isValidEmail(data.email)) &&
+        (!('phoneNumber' in data) ||
+          (data.phoneNumber is string && data.phoneNumber.size() >= 5 &&
+           data.phoneNumber.size() <= 20 && data.phoneNumber.matches("^[+0-9][0-9 -]*$"))) &&
+        data.createdAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) &&
+        isRecent(request.resource.data.createdAt);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
+        request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isOwner(userId);
+    }
+
+    // ---------------- groups ----------------
+
+    function isValidGroupCreate(data, uid) {
+      return data.keys().hasOnly(['type', 'name', 'adminUids', 'memberUids',
+             'inviteCode', 'createdAt', 'createdBy', 'alarmTime', 'alarmTimeZone', 'alarmAnchor',
+             'alarmDays', 'alarmOnce', 'lateThresholdMinutes', 'eventTitle', 'eventPlace', 'eventAt']) &&
+        (!('createdBy' in data) || data.createdBy == uid) &&
+        (!('alarmDays' in data) || (data.alarmDays is list && data.alarmDays.size() <= 7)) &&
+        (!('alarmOnce' in data) || data.alarmOnce is bool) &&
+        data.type in ['accountability', 'shared', 'event'] &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
+        data.adminUids is list && data.adminUids.size() == 1 && data.adminUids[0] == uid &&
+        data.memberUids is list && data.memberUids.size() == 1 &&
+        data.memberUids[0] == uid &&
+        data.inviteCode is string && data.inviteCode.size() >= 4 &&
+        data.inviteCode.size() <= 12 &&
+        data.createdAt is timestamp && isRecent(data.createdAt) &&
+        (!('alarmTime' in data) ||
+          (data.alarmTime is string && data.alarmTime.size() <= 8)) &&
+        (!('alarmTimeZone' in data) ||
+          (data.alarmTimeZone is string && data.alarmTimeZone.size() <= 64)) &&
+        (!('alarmAnchor' in data) || data.alarmAnchor in ['moment', 'local']) &&
+        (!('lateThresholdMinutes' in data) ||
+          (data.lateThresholdMinutes is number &&
+           data.lateThresholdMinutes >= 1 && data.lateThresholdMinutes <= 120)) &&
+        (!('eventTitle' in data) ||
+          (data.eventTitle is string && data.eventTitle.size() <= 120)) &&
+        (!('eventPlace' in data) ||
+          (data.eventPlace is string && data.eventPlace.size() <= 160)) &&
+        (!('eventAt' in data) || data.eventAt is timestamp);
+    }
+
+    function isGroupAdmin() {
+      return request.auth.uid in adminsOf(resource.data);
+    }
+
+    // Immutable core fields never change after creation.
+    function groupCoreUnchanged() {
+      return request.resource.data.type == resource.data.type &&
+        request.resource.data.createdAt == resource.data.createdAt &&
+        request.resource.data.inviteCode == resource.data.inviteCode;
+    }
+
+    // Admin editing settings (name, alarmTime, admin roster). Membership list
+    // stays the same; admin roster must stay non-empty and be a subset of members.
+    function isAdminSettingsUpdate() {
+      return isGroupAdmin() &&
+        groupCoreUnchanged() &&
+        request.resource.data.memberUids == resource.data.memberUids &&
+        request.resource.data.name is string &&
+        request.resource.data.name.size() >= 1 &&
+        request.resource.data.name.size() <= 60 &&
+        request.resource.data.adminUids is list &&
+        request.resource.data.adminUids.size() >= 1 &&
+        request.resource.data.adminUids.toSet().difference(request.resource.data.memberUids.toSet()).size() == 0;
+    }
+
+    // A non-member joining: appends only their own uid to memberUids; admins unchanged.
+    // The 100-member ceiling is enforced here, not just documented — this is the
+    // only path that grows memberUids.
+    function isSelfJoinUpdate() {
+      return !(request.auth.uid in resource.data.memberUids) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids']) &&
+        request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1 &&
+        request.resource.data.memberUids.size() <= 100 &&
+        request.auth.uid in request.resource.data.memberUids &&
+        resource.data.memberUids.toSet().difference(request.resource.data.memberUids.toSet()).size() == 0;
+    }
+
+    // A member leaving of their own accord. Only memberUids/adminUids may
+    // change; memberUids shrinks by exactly one — the caller, who must have been
+    // a member and must not be one afterwards. adminUids may only shrink (no new
+    // admins minted here), must stay non-empty, and must be a subset of the
+    // remaining members. The non-empty requirement is what stops the last admin
+    // walking out on a group that still has members: they must promote someone
+    // else or delete the group instead.
+    function isSelfLeaveUpdate() {
+      return request.auth.uid in resource.data.memberUids &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'adminUids']) &&
+        request.resource.data.memberUids.size() == resource.data.memberUids.size() - 1 &&
+        !(request.auth.uid in request.resource.data.memberUids) &&
+        resource.data.memberUids.toSet().difference(request.resource.data.memberUids.toSet()).size() == 1 &&
+        adminsOf(request.resource.data) is list &&
+        !(request.auth.uid in adminsOf(request.resource.data)) &&
+        adminsOf(request.resource.data).toSet().difference(adminsOf(resource.data).toSet()).size() == 0 &&
+        adminsOf(request.resource.data).toSet().difference(request.resource.data.memberUids.toSet()).size() == 0 &&
+        // Keep at least one admin — unless the group was already admin-less, in
+        // which case there's nothing left to protect and leaving is free.
+        (adminsOf(request.resource.data).size() >= 1 || adminsOf(resource.data).size() == 0);
+    }
+
+    // An admin removing exactly one member. Only memberUids/adminUids may change;
+    // memberUids shrinks by one with no additions; adminUids may only shrink (no
+    // new admins minted here) and must stay non-empty and a subset of the
+    // remaining members — which also forces a removed admin out of the roster.
+    function isAdminRemoveMemberUpdate() {
+      return isGroupAdmin() &&
+        groupCoreUnchanged() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids', 'adminUids']) &&
+        request.resource.data.memberUids.size() == resource.data.memberUids.size() - 1 &&
+        request.resource.data.memberUids.toSet().difference(resource.data.memberUids.toSet()).size() == 0 &&
+        request.resource.data.adminUids is list &&
+        request.resource.data.adminUids.size() >= 1 &&
+        request.resource.data.adminUids.toSet().difference(resource.data.adminUids.toSet()).size() == 0 &&
+        request.resource.data.adminUids.toSet().difference(request.resource.data.memberUids.toSet()).size() == 0;
+    }
+
+    match /groups/{groupId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.memberUids;
+      allow create: if isAuthenticated() && isValidGroupCreate(request.resource.data, request.auth.uid);
+      allow update: if isAuthenticated() &&
+        (isAdminSettingsUpdate() || isSelfJoinUpdate() ||
+         isAdminRemoveMemberUpdate() || isSelfLeaveUpdate());
+      // Any admin may delete the group outright, which removes it for everyone:
+      // each member's live query stops returning it, so their client cancels the
+      // associated on-device alarm on the next reconcile. An admin-less legacy
+      // group (empty adminUids) can be deleted by any member, so it isn't stuck
+      // forever with no one able to clean it up.
+      allow delete: if isAuthenticated() &&
+        (request.auth.uid in adminsOf(resource.data) ||
+         (adminsOf(resource.data).size() == 0 &&
+          request.auth.uid in resource.data.memberUids));
+
+      // members metadata — visible to group members; each writes only their own.
+      // An admin may additionally delete another member's doc when removing them.
+      match /members/{memberId} {
+        allow read: if isGroupMember(groupId);
+        allow create, update: if isOwner(memberId) && isGroupMember(groupId) &&
+          request.resource.data.keys().hasOnly(['displayName', 'initials', 'avatarColorHex', 'role', 'alarmTime', 'alarmDays']) &&
+          (!('alarmTime' in request.resource.data) ||
+            (request.resource.data.alarmTime is string && request.resource.data.alarmTime.size() <= 8)) &&
+          (!('alarmDays' in request.resource.data) ||
+            (request.resource.data.alarmDays is list && request.resource.data.alarmDays.size() <= 7));
+        allow delete: if isOwner(memberId) ||
+          (isAuthenticated() && request.auth.uid in adminsOf(groupData(groupId))) ||
+          (isAuthenticated() && adminsOf(groupData(groupId)).size() == 0 &&
+            request.auth.uid in groupData(groupId).memberUids);
+
+        // Per-day alarm-outcome history for the accountability dashboard. Doc id
+        // is the local date "yyyy-MM-dd". Any member can read the roster's
+        // history; each member writes only their own days.
+        match /history/{day} {
+          allow read: if isGroupMember(groupId);
+          allow create, update: if isOwner(memberId) && isGroupMember(groupId) &&
+            request.resource.data.keys().hasOnly(['status', 'detail', 'date', 'updatedAt']) &&
+            request.resource.data.status is string &&
+            request.resource.data.status.size() <= 20 &&
+            (!('detail' in request.resource.data) ||
+              (request.resource.data.detail is string && request.resource.data.detail.size() <= 120)) &&
+            (!('date' in request.resource.data) ||
+              (request.resource.data.date is string && request.resource.data.date.size() <= 10));
+          allow delete: if isOwner(memberId);
+        }
+      }
+
+      // activity feed — any member can read and append; entries are immutable.
+      match /activity/{activityId} {
+        allow read: if isGroupMember(groupId);
+        allow create: if isGroupMember(groupId) &&
+          request.resource.data.actorUid == request.auth.uid &&
+          request.resource.data.keys().hasOnly(['kind', 'message', 'actorUid', 'createdAt']) &&
+          request.resource.data.message is string && request.resource.data.message.size() <= 160 &&
+          request.resource.data.createdAt is timestamp;
+        allow update, delete: if false;
+      }
+
+      // statuses — visible to group members; each writes only their own.
+      // An admin may additionally delete another member's status when removing them.
+      match /statuses/{statusId} {
+        allow read: if isGroupMember(groupId);
+        allow create, update: if isOwner(statusId) && isGroupMember(groupId) &&
+          request.resource.data.keys().hasOnly(['status', 'detail', 'eta', 'updatedAt']) &&
+          request.resource.data.status in ['woke_up', 'snoozed', 'silent_late',
+            'coming', 'running_late', 'cant_make_it', 'no_response', 'waiting'] &&
+          request.resource.data.detail is string &&
+          request.resource.data.detail.size() <= 120 &&
+          (!('eta' in request.resource.data) ||
+            (request.resource.data.eta is string && request.resource.data.eta.size() <= 20)) &&
+          request.resource.data.updatedAt is timestamp;
+        allow delete: if isOwner(statusId) ||
+          (isAuthenticated() && request.auth.uid in adminsOf(groupData(groupId))) ||
+          (isAuthenticated() && adminsOf(groupData(groupId)).size() == 0 &&
+            request.auth.uid in groupData(groupId).memberUids);
+      }
+    }
+
+    // ---------------- invites (resolve code -> group) ----------------
+
+    // An invite carries a denormalized preview of its group, because a
+    // non-member cannot read groups/{id} — this doc is the only thing an
+    // invitee can see before deciding to accept. Every preview field is
+    // optional so invites written by older builds still validate.
+    function isValidInvite(d) {
+      return d.keys().hasOnly(['groupId', 'groupName', 'createdBy', 'asAdmin',
+             'groupType', 'alarmTime', 'alarmTimeZone', 'alarmAnchor', 'eventTitle', 'eventAt',
+             'createdByName', 'invitedByName']) &&
+        d.groupId is string && d.groupId.size() > 0 &&
+        d.groupName is string && d.groupName.size() >= 1 && d.groupName.size() <= 60 &&
+        d.createdBy is string &&
+        (!('asAdmin' in d) || d.asAdmin is bool) &&
+        (!('groupType' in d) || d.groupType in ['accountability', 'shared', 'event']) &&
+        (!('alarmTime' in d) || (d.alarmTime is string && d.alarmTime.size() <= 8)) &&
+        (!('alarmTimeZone' in d) || (d.alarmTimeZone is string && d.alarmTimeZone.size() <= 64)) &&
+        (!('alarmAnchor' in d) || d.alarmAnchor in ['moment', 'local']) &&
+        (!('eventTitle' in d) || (d.eventTitle is string && d.eventTitle.size() <= 120)) &&
+        (!('eventAt' in d) || d.eventAt is timestamp) &&
+        (!('createdByName' in d) || (d.createdByName is string && d.createdByName.size() <= 50)) &&
+        (!('invitedByName' in d) || (d.invitedByName is string && d.invitedByName.size() <= 50));
+    }
+
+    match /invites/{inviteCode} {
+      // `get` only, never `list`. `allow read` covers both, which let any
+      // signed-in user dump the whole collection and join every group.
+      allow get: if isAuthenticated();
+      allow list: if false;
+
+      // Must be a member of the group you're minting an invite for; otherwise
+      // anyone could hand out access to a stranger's group.
+      allow create: if isAuthenticated() &&
+        request.resource.data.createdBy == request.auth.uid &&
+        isGroupMember(request.resource.data.groupId) &&
+        isValidInvite(request.resource.data);
+
+      // Any group admin, not just the invite's author: a co-admin who changes
+      // the group's name or alarm must be able to refresh the stale preview.
+      allow update: if isAuthenticated() &&
+        request.auth.uid in groupData(resource.data.groupId).adminUids &&
+        request.resource.data.groupId == resource.data.groupId &&
+        isValidInvite(request.resource.data);
+
+      // The invite's author, or any admin of its group — and, for an admin-less
+      // group, any member. The admin/member paths let whoever deletes the group
+      // clean up its invite too; evaluated while the group doc still exists, so
+      // deleting the invite must precede deleting the group.
+      allow delete: if isAuthenticated() &&
+        (resource.data.createdBy == request.auth.uid ||
+         request.auth.uid in adminsOf(groupData(resource.data.groupId)) ||
+         (adminsOf(groupData(resource.data.groupId)).size() == 0 &&
+          request.auth.uid in groupData(resource.data.groupId).memberUids));
+    }
+
+    // FCM device tokens — each user manages only their own. Cloud Functions
+    // read these via the Admin SDK (which bypasses rules).
+    match /fcmTokens/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Per-user usage counters (e.g. lifetime events created, for the free-event
+    // quota). Owner-only. The count is monotonic by product rule — deleting an
+    // event never refunds the quota — but that's enforced by the client, not
+    // here; server-side enforcement waits on Cloud Functions being enabled.
+    match /usage/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Default deny.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

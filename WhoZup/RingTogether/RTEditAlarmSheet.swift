@@ -40,7 +40,7 @@ struct RTEditAlarmSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 16) {
-                Text(isShared ? "Shared wake-up time" : "Your wake-up time")
+                Text(isShared ? "Group alarm time" : "Your alarm time")
                     .font(.rtDisplay(20, .bold))
                     .foregroundStyle(RT.ink)
                     .padding(.top, 8)
@@ -56,6 +56,10 @@ struct RTEditAlarmSheet: View {
                 DatePicker("Alarm", selection: $time, displayedComponents: .hourAndMinute)
                     .datePickerStyle(.wheel)
                     .labelsHidden()
+                    // Force a 12-hour AM/PM wheel regardless of the device's
+                    // 24-hour setting — clearer for an alarm and consistent with
+                    // how times are shown everywhere else.
+                    .environment(\.locale, Locale(identifier: "en_US"))
 
                 // Shared alarms can be a single one-off or repeat; accountability
                 // alarms always repeat.

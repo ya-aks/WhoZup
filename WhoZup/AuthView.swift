@@ -34,6 +34,12 @@ struct AuthView: View {
         .onChange(of: authManager.isAwaitingPhoneCode) { _, awaiting in
             if awaiting { stage = .code }
         }
+        // The three stages share AuthManager's single error field, so reset it
+        // on every stage change — otherwise a phone error lingers onto the
+        // choices screen (and vice versa).
+        .onChange(of: stage) { _, _ in
+            authManager.clearError()
+        }
     }
 
     // MARK: - Choices
@@ -51,7 +57,7 @@ struct AuthView: View {
 
             logo.padding(.top, 24)
 
-            Text("Wake up together, show up together — one group, everyone accountable.")
+            Text("Show up together, stay in sync — one group, everyone accountable.")
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(RT.inkMuted)
                 .multilineTextAlignment(.center)

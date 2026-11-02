@@ -105,7 +105,7 @@ struct RTGroupDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    RTBadge(text: group.type == .accountability ? "Accountability" : "Shared",
+                    RTBadge(text: group.type == .accountability ? "Check-ins" : "In Sync",
                             color: group.type.eyebrow,
                             background: group.type.badgeBackground)
                     if group.isCurrentUserAdmin {
@@ -118,15 +118,19 @@ struct RTGroupDetailView: View {
                     .foregroundStyle(RT.ink)
                     .padding(.top, 10)
 
-                Text(group.type.detailedDescription)
-                    .font(.system(size: 13.5, weight: .medium))
-                    .foregroundStyle(RT.inkMuted)
-                    .padding(12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 12).fill(group.type.badgeBackground))
-                    .padding(.top, 8)
+                if let description = group.detailedDescription, !description.isEmpty {
+                    Text(description)
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(RT.inkMuted)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(group.type.badgeBackground))
+                        .padding(.top, 8)
+                }
 
                 heroCard(group).padding(.top, 14)
+
+                RTCheckInCard(groupId: group.id, accent: group.type.accent, topSpacing: 12)
 
                 actionRow(group).padding(.top, 12)
 
@@ -219,7 +223,7 @@ struct RTGroupDetailView: View {
                 .buttonStyle(RTPressStyle())
                 .padding(.top, 18)
             } else {
-                Text("Only an admin can change the shared wake-up time.")
+                Text("Only an admin can change the group alarm time.")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.white.opacity(0.75))
                     .padding(.top, 14)
@@ -233,7 +237,7 @@ struct RTGroupDetailView: View {
 
     @ViewBuilder private func actionRow(_ group: RTGroup) -> some View {
         HStack(spacing: 10) {
-            secondaryButton("Dashboard", icon: "chart.bar", accent: group.type.accent) {
+            secondaryButton("Rise Report", icon: "chart.bar", accent: group.type.accent) {
                 showDashboard = true
             }
             if group.isCurrentUserAdmin {
@@ -449,6 +453,15 @@ struct RTMemberRow: View {
                 Text(member.detail)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(RT.inkMuted)
+                if member.pendingSync {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.system(size: 10, weight: .bold))
+                        Text("Not synced — will sync when online")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .foregroundStyle(Color(hex: "#9a6410"))
+                }
             }
             Spacer()
             RTStatusChip(status: member.status)

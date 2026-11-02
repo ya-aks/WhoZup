@@ -39,9 +39,20 @@ struct FirestoreGroup: Codable, Identifiable {
     /// Only shared groups use this; absent/false means the usual recurring alarm.
     var alarmOnce: Bool?
     var lateThresholdMinutes: Int?
+    /// When the shared alarm was last set/changed. Used as the floor for the
+    /// missed-alarm check: an alarm set for later today (or after today's slot
+    /// already passed) hasn't fired yet, so the group isn't "late" until it does.
+    /// Absent on older groups — callers fall back to `createdAt`.
+    var alarmSetAt: Timestamp? = nil
+    var detailedDescription: String?
     var eventTitle: String?
     var eventPlace: String?
     var eventAt: Timestamp?          // event date & time
+    var eventEndAt: Timestamp?       // when the event ends (→ completed after)
+    /// Number of admin nudges sent for this event (events only). Written by the
+    /// `sendEventReminder` Cloud Function; the client reads it so the "N left"
+    /// count is authoritative and survives reload. Absent means 0.
+    var reminderCount: Int?
 
     var groupType: RTGroupType {
         RTGroupType(rawValue: type) ?? .accountability
@@ -71,6 +82,10 @@ struct GroupMemberDoc: Codable, Identifiable {
     /// Days the member's own alarm rings (`1=Sunday … 7=Saturday`); absent or
     /// empty means every day.
     var alarmDays: [Int]?
+    /// When this member last set/changed their own alarm. Floor for the
+    /// missed-alarm check so a just-set alarm isn't retroactively "late" for an
+    /// occurrence that already passed today. Absent on older docs.
+    var alarmSetAt: Timestamp? = nil
 }
 
 /// An append-only activity-feed entry (`groups/{id}/activity/{id}`).
@@ -89,6 +104,18 @@ struct MemberStatusDoc: Codable, Identifiable {
     var detail: String
     var eta: String?
     @ServerTimestamp var updatedAt: Timestamp?
+    /// True when the app wrote this itself (a skipped alarm marked "no
+    /// response"), not the member. A member may still correct an automatic
+    /// mark from the app; a real response always replaces the doc and clears it.
+    var auto: Bool?
+    /// When the member actually answered, stamped by their phone. `updatedAt`
+    /// is the server's time, which for an answer made offline is when it
+    /// *synced* — possibly hours later, or the next day.
+    var respondedAt: Timestamp?
+
+    /// The best known time of this status: the phone's answer time, falling
+    /// back to the server time for docs written before `respondedAt` existed.
+    var effectiveTime: Date? { (respondedAt ?? updatedAt)?.dateValue() }
 }
 
 /// An invite-code document (`invites/{code}`) mapping a code to a group.

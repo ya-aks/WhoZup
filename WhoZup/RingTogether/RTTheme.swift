@@ -99,8 +99,8 @@ enum RTGroupType: String, CaseIterable, Identifiable {
 
     var eyebrowText: String {
         switch self {
-        case .accountability: return "ACCOUNTABILITY"
-        case .shared: return "SHARED"
+        case .accountability: return "CHECK-INS"
+        case .shared: return "IN SYNC"
         case .event: return "EVENTS"
         }
     }
@@ -117,42 +117,42 @@ enum RTGroupType: String, CaseIterable, Identifiable {
 
     var blurb: String {
         switch self {
-        case .accountability: return "Everyone keeps their own alarm — you just keep each other honest."
-        case .shared: return "One common wake-up time for the whole group."
-        case .event: return "Coordinate a one-off — see who's coming in one tap."
+        case .accountability: return "Set individual alarms and share your status to build daily habits together."
+        case .shared: return "Sync a single alarm for group activities so everyone wakes up and shows up at once."
+        case .event: return "Plan one-off hangouts and track RSVPs and real-time attendance in one tap."
         }
     }
 
     var detailedDescription: String {
         switch self {
         case .accountability:
-            return "Each member keeps their own alarm time. When you wake up, snooze, or go silent, your status updates live so the group holds each other accountable."
+            return "Set your own alarm for your personal schedule. When it rings, the group sees live status updates (if you're up, snoozed, or still asleep) to keep everyone consistent."
         case .shared:
-            return "The whole group wakes to one common time for a shared activity. Each device rings independently so everyone can see who's up on a shared board."
+            return "Create a single alarm that rings on everyone's devices simultaneously. Track who is ready in real-time so you can coordinate morning runs, study groups, or standups instantly."
         case .event:
-            return "Coordinate one-off plans with 1-tap responses — Coming, Running Late, or Can't Make It — visible to everyone instantly."
+            return "Coordinate single events or meetups. Members reply with simple status taps (Coming, Late, or Can't make it), and admins can ping non-responders with a single button."
         }
     }
 
     var listTitle: String {
         switch self {
-        case .event: return "Coordination"
+        case .event: return "Events"
         default: return "Your groups"
         }
     }
 
     var listSubtitle: String {
         switch self {
-        case .accountability: return "Everyone keeps their own alarm."
-        case .shared: return "One common wake-up, one shared plan."
-        case .event: return "One-tap “are you coming?” checks."
+        case .accountability: return "Your own alarms, shared accountability."
+        case .shared: return "One shared alarm to show up together."
+        case .event: return "Quick one-tap RSVPs and event reminders."
         }
     }
 
     var newGroupLabel: String {
         switch self {
-        case .accountability: return "＋  New accountability group"
-        case .shared: return "＋  New shared group"
+        case .accountability: return "＋  New check-in group"
+        case .shared: return "＋  New In Sync group"
         case .event: return "＋  New event group"
         }
     }
@@ -160,8 +160,8 @@ enum RTGroupType: String, CaseIterable, Identifiable {
     /// Heading for this feature in the "How it works" explainer.
     var helpTitle: String {
         switch self {
-        case .accountability: return "Accountability"
-        case .shared: return "Shared wake-ups"
+        case .accountability: return "Check-ins"
+        case .shared: return "In Sync"
         case .event: return "Events"
         }
     }
@@ -171,9 +171,9 @@ enum RTGroupType: String, CaseIterable, Identifiable {
     var helpBody: String {
         switch self {
         case .accountability:
-            return "Everyone sets their own alarm. When it rings you dismiss it like any alarm — and the group just sees a little check that you're up. Nobody can touch anyone else's alarm; you're only keeping each other honest. Snooze or sleep through it and the group sees that too. No scores, no shame — just a nudge to actually get out of bed."
+            return "Everyone sets their own alarm. When it rings, you dismiss it like any alarm — and the group sees that you're up. Nobody can touch anyone else's alarm; you're only keeping each other honest. Snooze or miss it and the group sees that too. No scores, no shame — just a nudge to actually show up."
         case .shared:
-            return "One wake-up for the whole crew. An admin picks a time and everyone's phone rings together. Great for roommates, a trip morning, or a workout squad. Change the time and it updates for everyone. In different cities? Choose whether it rings at the same moment everywhere, or at that clock time wherever each person is."
+            return "One common alarm for the whole crew. An admin picks a time and everyone's phone rings together. Great for study groups, gym buddies, or a project team. Change the time and it updates for everyone. In different cities? Choose whether it rings at the same moment everywhere, or at that clock time wherever each person is."
         case .event:
             return "A quick “you coming?” for a one-off. Start an event, share the code, and everyone taps Coming, Running late, or Can't make it. Replies show up live, so no one's chasing people in a group chat. Your first 5 events are free — forever."
         }

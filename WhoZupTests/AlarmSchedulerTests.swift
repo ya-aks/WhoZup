@@ -107,7 +107,7 @@ final class AlarmSchedulerTests: XCTestCase {
     // MARK: Presentation building
 
     func testPresentationUsesCountdownBehaviorForSnooze() {
-        let presentation = AlarmScheduler.makePresentation(label: "Wake up")
+        let presentation = AlarmScheduler.makePresentation(label: "Alarm")
 
         XCTAssertEqual(presentation.alert.secondaryButtonBehavior, .countdown)
         XCTAssertNotNil(presentation.alert.secondaryButton, "Snooze button should exist")

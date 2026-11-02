@@ -14,7 +14,7 @@ struct RTEventDetailView: View {
 
     @Environment(GroupRepository.self) private var repository
     @Environment(\.dismiss) private var dismiss
-    @State private var reminderCount = 0
+    @State private var sendingReminder = false
     @State private var showETAPicker = false
     @State private var showShareInvite = false
     @State private var showManageMembers = false
@@ -37,7 +37,12 @@ struct RTEventDetailView: View {
     private var myStatus: RTStatus { pendingStatus ?? liveStatus }
     private var hasResponded: Bool { myStatus != .noResponse }
     private var nonResponderCount: Int { group?.nonResponders.count ?? 0 }
-    private var canRemind: Bool { reminderCount < 2 }
+    /// Server-persisted nudge count (survives reload); the cap is 2 per event.
+    private var remindersSent: Int { group?.reminderCount ?? 0 }
+    private let maxReminders = 5
+    private var canRemind: Bool { remindersSent < maxReminders && !sendingReminder }
+    /// Past its end time — the event is view-only (no RSVP, nudge, or member management).
+    private var isCompleted: Bool { group?.event?.isCompleted ?? false }
 
     var body: some View {
         Group {
@@ -111,16 +116,32 @@ struct RTEventDetailView: View {
     }
 
     @ViewBuilder private func dangerZone(_ group: RTGroup) -> some View {
+        let isAdmin = group.isCurrentUserAdmin || group.adminUids.isEmpty
         VStack(spacing: 10) {
-            RTDestructiveButton(title: "Leave event",
-                                icon: "rectangle.portrait.and.arrow.right") {
-                if group.isSoleAdminWithOthers { showReassignAdmin = true }
-                else { showLeaveConfirm = true }
-            }
-            // Admins can delete; so can any member of an admin-less legacy group.
-            if group.isCurrentUserAdmin || group.adminUids.isEmpty {
-                RTDestructiveButton(title: "Delete event", icon: "trash") {
-                    showDeleteConfirm = true
+            // A completed event just needs cleanup: admins delete it for everyone,
+            // members leave. An admin has no "leave" (nothing to hand off anymore).
+            if isCompleted {
+                if isAdmin {
+                    RTDestructiveButton(title: "Delete event", icon: "trash") {
+                        showDeleteConfirm = true
+                    }
+                } else {
+                    RTDestructiveButton(title: "Leave event",
+                                        icon: "rectangle.portrait.and.arrow.right") {
+                        showLeaveConfirm = true
+                    }
+                }
+            } else {
+                RTDestructiveButton(title: "Leave event",
+                                    icon: "rectangle.portrait.and.arrow.right") {
+                    if group.isSoleAdminWithOthers { showReassignAdmin = true }
+                    else { showLeaveConfirm = true }
+                }
+                // Admins can delete; so can any member of an admin-less legacy group.
+                if isAdmin {
+                    RTDestructiveButton(title: "Delete event", icon: "trash") {
+                        showDeleteConfirm = true
+                    }
                 }
             }
         }
@@ -160,26 +181,45 @@ struct RTEventDetailView: View {
                     .foregroundStyle(RT.ink)
                     .padding(.top, 10)
 
-                Text(isAdmin ? "Active event · you're admin" : "Active event")
+                Text(isCompleted
+                     ? "Event ended · view only"
+                     : (isAdmin ? "Active event · you're admin" : "Active event"))
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(RT.inkMuted)
                     .padding(.top, 2)
 
+                if let description = group.detailedDescription, !description.isEmpty {
+                    Text(description)
+                        .font(.system(size: 13.5, weight: .medium))
+                        .foregroundStyle(RT.inkMuted)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(RTGroupType.event.badgeBackground))
+                        .padding(.top, 8)
+                }
+
                 eventCard(group).padding(.top, 16)
 
-                replyButtons.padding(.top, 14)
+                if isCompleted {
+                    Label("This event has ended. Responses are closed.", systemImage: "checkmark.seal.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(RT.inkMuted)
+                        .padding(.top, 16)
+                } else {
+                    replyButtons.padding(.top, 14)
 
-                Text(hasResponded ? "Tap another option to change your reply." : "Reply in one tap — your group sees it live.")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(RT.inkMuted)
-                    .padding(.top, 8)
+                    Text(hasResponded ? "Tap another option to change your reply." : "Reply in one tap — your group sees it live.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(RT.inkMuted)
+                        .padding(.top, 8)
 
-                if isAdmin {
-                    HStack(spacing: 10) {
-                        adminActionButton("Share invite", icon: "person.badge.plus") { showShareInvite = true }
-                        adminActionButton("Manage", icon: "person.2") { showManageMembers = true }
+                    if isAdmin {
+                        HStack(spacing: 10) {
+                            adminActionButton("Share invite", icon: "person.badge.plus") { showShareInvite = true }
+                            adminActionButton("Manage", icon: "person.2") { showManageMembers = true }
+                        }
+                        .padding(.top, 14)
                     }
-                    .padding(.top, 14)
                 }
 
                 HStack {
@@ -201,9 +241,9 @@ struct RTEventDetailView: View {
                 }
                 .padding(.top, 14)
 
-                // Nudge is admin-only and only shown when there are actually
-                // members who haven't responded.
-                if isAdmin && nonResponderCount > 0 {
+                // Nudge is admin-only, hidden once the event has ended, and only
+                // shown when there are actually members who haven't responded.
+                if isAdmin && !isCompleted && nonResponderCount > 0 {
                     reminderButton.padding(.top, 16)
                 }
 
@@ -304,11 +344,19 @@ struct RTEventDetailView: View {
 
     private var reminderButton: some View {
         Button {
-            if canRemind { reminderCount += 1 }
+            guard canRemind else { return }
+            sendingReminder = true
+            Task {
+                let ok = await repository.sendReminder(groupId: groupId)
+                sendingReminder = false
+                if !ok { showErrorAlert = true }
+            }
         } label: {
-            Text(canRemind
-                 ? "Nudge \(nonResponderCount) non-responder\(nonResponderCount == 1 ? "" : "s") · \(2 - reminderCount) left"
-                 : "Reminder limit reached (max 2)")
+            Text(remindersSent >= maxReminders
+                 ? "Reminder limit reached (max \(maxReminders))"
+                 : (sendingReminder
+                    ? "Sending…"
+                    : "Nudge \(nonResponderCount) non-responder\(nonResponderCount == 1 ? "" : "s") · \(maxReminders - remindersSent) left"))
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(canRemind ? RTGroupType.accountability.accent : RT.inkFaint)
                 .frame(maxWidth: .infinity)

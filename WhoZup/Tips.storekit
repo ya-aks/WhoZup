@@ -3,7 +3,7 @@
   "nonRenewingSubscriptions" : [],
   "products" : [
     {
-      "displayPrice" : "1.99",
+      "displayPrice" : "29",
       "familyShareable" : false,
       "internalID" : "0000000000001",
       "localizations" : [
@@ -18,7 +18,7 @@
       "type" : "Consumable"
     },
     {
-      "displayPrice" : "4.99",
+      "displayPrice" : "99",
       "familyShareable" : false,
       "internalID" : "0000000000002",
       "localizations" : [
@@ -33,7 +33,7 @@
       "type" : "Consumable"
     },
     {
-      "displayPrice" : "9.99",
+      "displayPrice" : "149",
       "familyShareable" : false,
       "internalID" : "0000000000003",
       "localizations" : [
@@ -48,7 +48,7 @@
       "type" : "Consumable"
     },
     {
-      "displayPrice" : "9.99",
+      "displayPrice" : "99",
       "familyShareable" : false,
       "internalID" : "0000000000004",
       "localizations" : [
@@ -61,6 +61,21 @@
       "productID" : "com.whozup.eventpack.20",
       "referenceName" : "Event Pack (20)",
       "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "299",
+      "familyShareable" : false,
+      "internalID" : "0000000000005",
+      "localizations" : [
+        {
+          "description" : "Create unlimited events forever",
+          "displayName" : "Lifetime Unlimited Events",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.whozup.events.lifetime",
+      "referenceName" : "Lifetime Unlimited Events",
+      "type" : "NonConsumable"
     }
   ],
   "settings" : {
@@ -68,8 +83,8 @@
     "_developerTeamID" : "0000000000",
     "_failTransactionsEnabled" : false,
     "_lastSynchronizedDate" : 0,
-    "_locale" : "en_US",
-    "_storefront" : "USA",
+    "_locale" : "en_IN",
+    "_storefront" : "IND",
     "_storeKitErrors" : []
   },
   "subscriptionGroups" : [],

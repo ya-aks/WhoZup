@@ -199,7 +199,7 @@ final class RTAlarmSync {
         scheduledLabels = scheduledLabels.filter { desired[$0.key] != nil }
         scheduledDays = scheduledDays.filter { desired[$0.key] != nil }
 
-        guard !desired.isEmpty else { return }
+        guard !desired.isEmpty else { await AlarmCheckInNotifier.refresh(); return }
         guard await ensureAuthorized() else { return }
 
         for (key, groupIds) in desired {
@@ -213,8 +213,18 @@ final class RTAlarmSync {
 
             // Always refresh these: the alarm may predate this launch, and the
             // set of groups behind it changes as groups are joined or left.
-            repository.registerAlarm(alarmID: id, groupIds: groupIds)
             recorder.registerScheduled(id: id, scheduledTime: fireDate)
+            // Persist what a stop/snooze needs to become a status write — from
+            // the in-process recorder or from a cold background launch via the
+            // alarm's AppIntents alike. A repeating alarm also stores its
+            // recurrence so a later firing derives against the right occurrence
+            // rather than this (soon-stale) fireDate, and every record is stamped
+            // with the owning account so a later sign-in can't inherit it.
+            AlarmActionStore.shared.save(
+                alarmID: id, groupIds: groupIds, scheduledTime: fireDate,
+                time: once ? nil : time, days: once ? nil : days,
+                uid: repository.signedInUid
+            )
 
             // Already on the system with the same label and days — leave it
             // alone rather than churning a live alarm.
@@ -238,6 +248,10 @@ final class RTAlarmSync {
                 // are harmless if no alarm ends up existing.
             }
         }
+
+        // Re-align the "Did you wake up?" safety-net reminders with the alarms
+        // (and records) just reconciled.
+        await AlarmCheckInNotifier.refresh()
     }
 
     /// Cancels an alarm and forgets it everywhere. The recorder must be told
@@ -245,8 +259,29 @@ final class RTAlarmSync {
     /// programmatic cancel would otherwise be recorded as the user waking up.
     private func cancel(_ id: UUID, repository: GroupRepository) {
         recorder.unregister(id: id)
-        repository.unregisterAlarm(alarmID: id)
+        AlarmActionStore.shared.remove(alarmID: id)
         try? scheduler.cancelAlarm(id: id)
+        Task { await AlarmCheckInNotifier.remove(alarmID: id) }
+    }
+
+    /// Cancels every WhoZup alarm on the device and forgets every persisted
+    /// alarm record. Called on sign-out and account deletion: the signed-out
+    /// shell never mounts `RTRootView`, so no reconcile would otherwise run, and
+    /// the previous account's alarms would keep ringing — and, with someone else
+    /// signed in, could write into that account's groups.
+    ///
+    /// Only alarms whose id matches the one derived from their own slot are
+    /// touched, exactly as in `reconcile`. Records are cleared first, so even if
+    /// the recorder reads a cancel as a dismiss, the handler finds nothing to
+    /// write.
+    static func removeAllAlarms() {
+        let scheduler = AlarmScheduler()
+        AlarmActionStore.shared.removeAll()
+        AlarmResponseJournal.removeAll()
+        Task { await AlarmCheckInNotifier.removeAll() }
+        for slot in (try? scheduler.existingSlots()) ?? [] where alarmID(forTime: slot.key) == slot.id {
+            try? scheduler.cancelAlarm(id: slot.id)
+        }
     }
 
     /// The alarm's display label. A single group uses its name; a shared slot

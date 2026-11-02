@@ -2,11 +2,7 @@
 //  RTDashboardView.swift
 //  WhoZup
 //
-//  The accountability dashboard: who woke up, snoozed, or slept through, day by
-//  day and across a month, so a group can hold each other accountable. Reads the
-//  per-day history recorded on each alarm outcome (see GroupRepository). Works
-//  for a single group (opened from its detail) or across every accountability
-//  group (opened from the More tab) when `groupId` is nil.
+//  Created by Antigravity on 01/08/26.
 //
 
 import SwiftUI
@@ -26,10 +22,11 @@ struct RTDashboardView: View {
     @State private var dayData: [String: [String: RTStatus]] = [:]
     @State private var monthData: [String: [String: [String: RTStatus]]] = [:]
     @State private var loading = false
+    @State private var selectedType: RTGroupType = .accountability
 
     private var groupsToShow: [RTGroup] {
         if let groupId { return repository.group(id: groupId).map { [$0] } ?? [] }
-        return repository.groups(of: .accountability)
+        return repository.groups(of: selectedType)
     }
 
     /// Never let the user page into the future.
@@ -52,7 +49,7 @@ struct RTDashboardView: View {
                     periodNav
 
                     if groupsToShow.isEmpty {
-                        Text("No accountability groups yet.")
+                        Text(selectedType == .accountability ? "No check-in groups yet." : "No In Sync groups yet.")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(RT.inkMuted)
                             .padding(.top, 20)
@@ -68,9 +65,26 @@ struct RTDashboardView: View {
             }
             .background(RT.canvas)
             .scrollIndicators(.hidden)
-            .navigationTitle(groupId == nil ? "Accountability" : "Dashboard")
+            .navigationTitle(groupId == nil ? "" : "Rise Reports")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                if groupId == nil {
+                    ToolbarItem(placement: .principal) {
+                        Menu {
+                            Button("Check-ins") { selectedType = .accountability }
+                            Button("In Sync") { selectedType = .shared }
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(selectedType == .accountability ? "Rise Reports: Check-ins" : "Rise Reports: In Sync")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundStyle(RT.ink)
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(RT.inkSecondary)
+                            }
+                        }
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
@@ -79,12 +93,24 @@ struct RTDashboardView: View {
                 if loading { ProgressView().padding(.top, 8) }
             }
         }
+        .onAppear {
+            if let groupId, let group = repository.group(id: groupId) {
+                selectedType = group.type
+            }
+        }
         .task(id: fetchSignature) { await fetch() }
     }
 
+    /// Re-fetches when the period or groups change, and also whenever anyone's
+    /// live status does — so a response made (or synced) while the report is
+    /// open shows up instead of the report going stale until reopened.
     private var fetchSignature: String {
         let ids = groupsToShow.map(\.id).sorted().joined(separator: ",")
-        return "\(mode.rawValue)#\(mode == .day ? Self.dayKey(refDate) : Self.monthKey(refDate))#\(ids)"
+        let live = groupsToShow
+            .flatMap { g in g.roster.map { "\(g.id).\($0.uid)=\($0.status.rawValue)" } }
+            .sorted()
+            .joined(separator: ",")
+        return "\(mode.rawValue)#\(mode == .day ? Self.dayKey(refDate) : Self.monthKey(refDate))#\(ids)#\(live)"
     }
 
     // MARK: Period navigation
@@ -139,67 +165,141 @@ struct RTDashboardView: View {
     @ViewBuilder private func groupSection(_ group: RTGroup) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             if groupId == nil {
-                Text(group.name)
-                    .font(.rtDisplay(18, .bold))
-                    .foregroundStyle(RT.ink)
+                HStack {
+                    Text(group.name)
+                        .font(.rtDisplay(17, .bold))
+                        .foregroundStyle(RT.ink)
+                    Spacer()
+                }
             }
 
             if mode == .day {
-                ForEach(group.roster) { member in
-                    dayRow(group: group, member: member)
-                    if member.id != group.roster.last?.id { Divider().overlay(RT.divider) }
+                VStack(spacing: 2) {
+                    ForEach(group.roster) { member in
+                        dayRow(group: group, member: member)
+                        if member.id != group.roster.last?.id { Divider().overlay(RT.divider) }
+                    }
                 }
             } else {
-                ForEach(group.roster) { member in
-                    monthRow(group: group, member: member)
+                VStack(spacing: 10) {
+                    ForEach(group.roster) { member in
+                        memberPerformanceCard(group: group, member: member)
+                    }
                 }
             }
         }
-        .padding(16)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 20).fill(RT.card))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(RT.cardBorder, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 18).fill(RT.card))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(RT.cardBorder, lineWidth: 1))
     }
 
     private func dayRow(group: RTGroup, member: RTMember) -> some View {
         let status = dayData[group.id]?[member.uid]
-        return HStack(spacing: 12) {
-            RTAvatar(initials: member.initials, color: member.displayAvatarColor, size: 34)
+        return HStack(spacing: 10) {
+            RTAvatar(initials: member.initials, color: member.displayAvatarColor, size: 26)
             Text(member.displayName)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(RT.ink)
             Spacer()
             if let status {
                 RTStatusChip(status: status)
             } else {
                 Text("No data")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(RT.inkFaint)
-                    .padding(.horizontal, 10).padding(.vertical, 5)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(Capsule().fill(RT.cardBorder))
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 4)
     }
 
-    private func monthRow(group: RTGroup, member: RTMember) -> some View {
-        let days = daysInMonth(refDate)
+    // MARK: Member Performance Card (Month View)
+
+    private func memberPerformanceCard(group: RTGroup, member: RTMember) -> some View {
+        let monthLength = daysInMonth(refDate)
+        let isCurrentMonth = Calendar.current.isDate(refDate, equalTo: Date(), toGranularity: .month)
+        let today = isCurrentMonth ? Calendar.current.component(.day, from: Date()) : monthLength
         let outcomes = monthData[group.id]?[member.uid] ?? [:]
-        return VStack(alignment: .leading, spacing: 6) {
-            Text(member.displayName)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(RT.ink)
-            // A compact strip: one small square per day of the month.
-            HStack(spacing: 3) {
-                ForEach(1...days, id: \.self) { d in
-                    let key = dayKeyFor(day: d, in: refDate)
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(outcomes[key]?.chipColor ?? RT.cardBorder)
-                        .frame(width: 8, height: 14)
-                }
+
+        // Every day of the month, in order (1 → last), with its recorded outcome.
+        // Days past today (current month) are marked future so the timeline shows
+        // the whole month while the stats and streak only count elapsed days.
+        let dayStatuses: [(day: Int, status: RTStatus?, isFuture: Bool)] = (1...monthLength).map { d in
+            (d, outcomes[dayKeyFor(day: d, in: refDate)], d > today)
+        }
+
+        var wokeCount = 0
+        var snoozeCount = 0
+        var lateCount = 0
+        var recordedDays = 0
+        for entry in dayStatuses where !entry.isFuture {
+            guard let status = entry.status else { continue }
+            recordedDays += 1
+            switch status {
+            case .wokeUp: wokeCount += 1
+            case .snoozed: snoozeCount += 1
+            case .silentLate, .runningLate: lateCount += 1
+            default: break
             }
         }
-        .padding(.vertical, 8)
+
+        let onTimeRate = recordedDays > 0 ? Int(round(Double(wokeCount) / Double(recordedDays) * 100)) : 0
+        let streak = currentStreak(dayStatuses.map { ($0.day, $0.status) })
+
+        return VStack(alignment: .leading, spacing: 8) {
+            // Header Row: Avatar + Name + On-time % + current streak
+            HStack(spacing: 8) {
+                RTAvatar(initials: member.initials, color: member.displayAvatarColor, size: 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(member.displayName)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(RT.ink)
+                    Text("\(onTimeRate)% on-time")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(onTimeRate >= 80 ? RTStatus.wokeUp.chipColor : (onTimeRate >= 50 ? RTStatus.snoozed.chipColor : RT.inkMuted))
+                }
+                Spacer()
+                streakBadge(streak)
+            }
+
+            RTMonthTimeline(days: dayStatuses, today: today, isCurrentMonth: isCurrentMonth)
+
+            // Stat counters
+            Text("\(wokeCount) woke · \(snoozeCount) snoozed · \(lateCount) late")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(RT.inkMuted)
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 14).fill(RT.canvas.opacity(0.4)))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(RT.cardBorder, lineWidth: 0.8))
+    }
+
+    /// Consecutive on-time (woke-up) days counting back from the most recent
+    /// recorded day. Days with no alarm/outcome are skipped rather than treated
+    /// as a break, so an off day doesn't reset a genuine streak; the first
+    /// recorded non-woke day ends it.
+    private func currentStreak(_ days: [(day: Int, status: RTStatus?)]) -> Int {
+        var streak = 0
+        for entry in days.reversed() {
+            guard let status = entry.status else { continue }
+            if status == .wokeUp { streak += 1 } else { break }
+        }
+        return streak
+    }
+
+    @ViewBuilder private func streakBadge(_ streak: Int) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "flame.fill")
+                .font(.system(size: 11, weight: .bold))
+            Text(streak > 0 ? "\(streak)" : "0")
+                .font(.system(size: 13, weight: .heavy))
+        }
+        .foregroundStyle(streak > 0 ? Color(hex: "#e0742a") : RT.inkFaint)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(streak > 0 ? Color(hex: "#fbeed6") : RT.cardBorder.opacity(0.5)))
     }
 
     private var legend: some View {
@@ -214,7 +314,7 @@ struct RTDashboardView: View {
 
     private func legendDot(_ color: Color, _ label: String) -> some View {
         HStack(spacing: 5) {
-            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 9, height: 9)
+            Circle().fill(color).frame(width: 7, height: 7)
             Text(label).font(.system(size: 11, weight: .semibold)).foregroundStyle(RT.inkSecondary)
         }
     }
@@ -256,5 +356,95 @@ struct RTDashboardView: View {
     }
     private func dayKeyFor(day: Int, in monthDate: Date) -> String {
         String(format: "%@-%02d", Self.monthKey(monthDate), day)
+    }
+}
+
+/// The month heatmap timeline as its own view so it can track scroll position
+/// and render a live scroll indicator beneath the strip — signalling that the
+/// row scrolls and where in the month you currently are.
+private struct RTMonthTimeline: View {
+    let days: [(day: Int, status: RTStatus?, isFuture: Bool)]
+    let today: Int
+    let isCurrentMonth: Bool
+
+    @State private var contentWidth: CGFloat = 0
+    @State private var viewportWidth: CGFloat = 0
+    @State private var scrollX: CGFloat = 0
+
+    private let cellWidth: CGFloat = 15
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 3) {
+                    ForEach(days, id: \.day) { cell($0) }
+                }
+                .padding(.vertical, 1)
+            }
+            .onScrollGeometryChange(for: Metrics.self) { geo in
+                Metrics(offset: geo.contentOffset.x,
+                        content: geo.contentSize.width,
+                        viewport: geo.containerSize.width)
+            } action: { _, m in
+                scrollX = m.offset
+                contentWidth = m.content
+                viewportWidth = m.viewport
+            }
+            .onAppear { proxy.scrollTo(today, anchor: .center) }
+        }
+        .frame(height: 40)
+        .overlay(alignment: .leading) { edgeArrow(pointsLeft: true) }
+        .overlay(alignment: .trailing) { edgeArrow(pointsLeft: false) }
+    }
+
+    private func cell(_ entry: (day: Int, status: RTStatus?, isFuture: Bool)) -> some View {
+        let isToday = isCurrentMonth && entry.day == today
+        // A number for day 1, every 5th day, and today — enough to orient.
+        let showLabel = entry.day == 1 || entry.day % 5 == 0 || isToday
+        return VStack(spacing: 4) {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(fill(entry))
+                .frame(width: cellWidth, height: 22)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 3)
+                        .stroke(RT.ink, lineWidth: isToday ? 2 : 0)
+                )
+            Text(showLabel ? "\(entry.day)" : " ")
+                .font(.system(size: 9, weight: isToday ? .bold : .medium))
+                .foregroundStyle(isToday ? RT.ink : RT.inkFaint)
+        }
+        .frame(width: cellWidth)
+        .id(entry.day)
+    }
+
+    private func fill(_ entry: (day: Int, status: RTStatus?, isFuture: Bool)) -> Color {
+        if let status = entry.status { return status.reportColor }
+        return RT.cardBorder.opacity(entry.isFuture ? 0.25 : 0.55)
+    }
+
+    /// A small chevron floating at an edge to signal there are more days that
+    /// way. Shown only when the strip actually overflows in that direction, so
+    /// it appears trailing when more days sit to the right and leading when
+    /// earlier days sit to the left (the common case, since we open on today).
+    @ViewBuilder private func edgeArrow(pointsLeft: Bool) -> some View {
+        let maxScroll = max(contentWidth - viewportWidth, 0)
+        let scrollable = contentWidth > viewportWidth + 1
+        let show = scrollable && (pointsLeft ? scrollX > 1 : scrollX < maxScroll - 1)
+        if show {
+            Image(systemName: pointsLeft ? "chevron.left" : "chevron.right")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(RT.inkMuted)
+                .frame(width: 18, height: 18)
+                .background(Circle().fill(RT.card))
+                .overlay(Circle().stroke(RT.cardBorder, lineWidth: 0.8))
+                .offset(y: -9)
+                .allowsHitTesting(false)
+        }
+    }
+
+    private struct Metrics: Equatable {
+        let offset: CGFloat
+        let content: CGFloat
+        let viewport: CGFloat
     }
 }

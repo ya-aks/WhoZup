@@ -64,6 +64,9 @@ public final class AlarmScheduler {
     private let manager: AlarmScheduling
     private let snoozeInterval: TimeInterval
 
+    /// How long the native Snooze countdown runs before the alarm re-alerts.
+    public static let defaultSnoozeInterval: TimeInterval = 5 * 60
+
     /// - Parameters:
     ///   - manager: The alarm manager to schedule against. Defaults to the
     ///     real `AlarmManager.shared`; inject a fake in tests.
@@ -71,7 +74,7 @@ public final class AlarmScheduler {
     ///     re-alerts. Defaults to 5 minutes.
     public init(
         manager: AlarmScheduling = AlarmManager.shared,
-        snoozeInterval: TimeInterval = 5 * 60
+        snoozeInterval: TimeInterval = AlarmScheduler.defaultSnoozeInterval
     ) {
         self.manager = manager
         self.snoozeInterval = snoozeInterval
@@ -97,6 +100,7 @@ public final class AlarmScheduler {
     /// re-alerting.
     public func scheduleAlarm(id: UUID, date: Date, label: String = "Alarm") async throws {
         let configuration = Self.makeConfiguration(
+            id: id,
             date: date,
             label: label,
             snoozeInterval: snoozeInterval
@@ -109,6 +113,7 @@ public final class AlarmScheduler {
     /// weekly recurrence so it keeps ringing without the app being reopened.
     public func scheduleAlarm(id: UUID, time: String, days: [Int], label: String = "Alarm") async throws {
         let configuration = Self.makeConfiguration(
+            id: id,
             time: time,
             days: days,
             label: label,
@@ -179,6 +184,7 @@ public final class AlarmScheduler {
     /// The presentation and countdown pieces are exposed separately below so
     /// they can be unit-tested (AlarmConfiguration itself is opaque).
     static func makeConfiguration(
+        id: UUID,
         date: Date,
         label: String,
         snoozeInterval: TimeInterval
@@ -191,13 +197,16 @@ public final class AlarmScheduler {
         return AlarmManager.AlarmConfiguration(
             countdownDuration: makeCountdownDuration(snoozeInterval: snoozeInterval),
             schedule: .fixed(date),
-            attributes: attributes
+            attributes: attributes,
+            stopIntent: StopAlarmIntent(alarmID: id),
+            secondaryIntent: SnoozeAlarmIntent(alarmID: id)
         )
     }
 
     /// Builds a repeating configuration firing at `time` ("HH:mm") on the given
     /// weekdays (empty means every day), using AlarmKit weekly recurrence.
     static func makeConfiguration(
+        id: UUID,
         time: String,
         days: [Int],
         label: String,
@@ -222,7 +231,9 @@ public final class AlarmScheduler {
         return AlarmManager.AlarmConfiguration(
             countdownDuration: makeCountdownDuration(snoozeInterval: snoozeInterval),
             schedule: schedule,
-            attributes: attributes
+            attributes: attributes,
+            stopIntent: StopAlarmIntent(alarmID: id),
+            secondaryIntent: SnoozeAlarmIntent(alarmID: id)
         )
     }
 

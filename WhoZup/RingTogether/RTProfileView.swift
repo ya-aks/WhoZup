@@ -9,6 +9,7 @@
 //
 
 import FirebaseAuth
+import StoreKit
 import SwiftUI
 
 struct RTProfileView: View {
@@ -16,8 +17,42 @@ struct RTProfileView: View {
 
     @Environment(AuthManager.self) private var authManager
     @Environment(GroupRepository.self) private var repository
-    @State private var showHowItWorks = false
     @State private var showDashboard = false
+    @StateObject private var eventPackStore = EventPackStore.shared
+    @State private var restoreAlert: RestoreAlert?
+    @State private var showDeleteConfirm = false
+    @State private var isDeleting = false
+    @State private var showSignOutConfirm = false
+    @State private var isSigningOut = false
+    @State private var deleteError: String?
+
+    /// Result of a restore attempt, surfaced as an alert.
+    private enum RestoreAlert: Identifiable {
+        case restored, nothing, failed(String)
+        var id: String {
+            switch self {
+            case .restored: return "restored"
+            case .nothing: return "nothing"
+            case .failed(let m): return "failed-\(m)"
+            }
+        }
+    }
+
+    private func restorePurchases() {
+        Task {
+            let restored = await eventPackStore.restorePurchases()
+            if restored {
+                restoreAlert = .restored
+            } else if let error = eventPackStore.errorMessage {
+                // The store sets this to a "nothing to restore" message on an
+                // empty result, or the underlying error on failure.
+                restoreAlert = error.contains("No previous purchases")
+                    ? .nothing : .failed(error)
+            } else {
+                restoreAlert = .nothing
+            }
+        }
+    }
 
     /// Placeholder app link — the real store/universal link is added later.
     private let appLink = "https://whozup.app"
@@ -70,6 +105,31 @@ struct RTProfileView: View {
         }
         .background(RT.canvas)
         .scrollIndicators(.hidden)
+        .alert(item: $restoreAlert) { alert in
+            switch alert {
+            case .restored:
+                return Alert(
+                    title: Text("Purchases restored"),
+                    message: Text("Your Lifetime Unlimited unlock is active again."),
+                    dismissButton: .default(Text("OK"))
+                )
+            case .nothing:
+                return Alert(
+                    title: Text("Nothing to restore"),
+                    message: Text("No previous purchases were found for this Apple ID. Consumable event packs and tips can't be restored."),
+                    dismissButton: .default(Text("OK"))
+                )
+            case .failed(let message):
+                return Alert(
+                    title: Text("Couldn't restore"),
+                    message: Text(message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+        }
+        // Hosted here (on the full-screen root) rather than on the settings card
+        // so the dimmed backdrop and centered popup cover the whole screen.
+        .overlay { accountActionOverlay }
     }
 
     private var header: some View {
@@ -113,23 +173,30 @@ struct RTProfileView: View {
                     .foregroundStyle(RT.inkMuted)
                     .padding(.top, 14)
             } else {
-                HStack(alignment: .bottom, spacing: 12) {
-                    ForEach(alarmGroups) { group in
-                        VStack(spacing: 6) {
-                            Circle().fill(myStatus(in: group).chipColor).frame(width: 16, height: 16)
-                            Text(String(group.name.prefix(1)).uppercased())
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(RT.inkMuted)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 16) {
+                        ForEach(alarmGroups) { group in
+                            VStack(spacing: 6) {
+                                statusDot(myStatus(in: group), size: 16)
+                                Text(groupInitials(group.name))
+                                    .font(.system(size: 12, weight: .bold))
+                                    .foregroundStyle(RT.inkMuted)
+                                    .lineLimit(1)
+                            }
                         }
                     }
-                    Spacer(minLength: 0)
+                    .padding(.top, 16)
+                    .padding(.trailing, 2)
                 }
-                .padding(.top, 16)
 
-                HStack(spacing: 14) {
-                    legend(RT.dotOnTime, "On time")
-                    legend(RT.dotSnoozed, "Snoozed")
-                    legend(RT.dotLate, "Late")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        legend(RT.dotOnTime, "On time")
+                        legend(RT.dotSnoozed, "Snoozed")
+                        legend(RT.dotLate, "Late")
+                        legend(RT.inkFaint, "Not completed", filled: false)
+                    }
+                    .padding(.trailing, 2)
                 }
                 .padding(.top, 14)
             }
@@ -139,9 +206,40 @@ struct RTProfileView: View {
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(RT.cardBorder, lineWidth: 1))
     }
 
-    private func legend(_ color: Color, _ label: String) -> some View {
+    /// Initials from every word of the group name (e.g. "Morning Warriors" → "MW"),
+    /// capped at three letters so the strip stays tidy. Falls back to the first
+    /// character for single-word or symbol-only names.
+    private func groupInitials(_ name: String) -> String {
+        let words = name.split { $0 == " " || $0 == "-" || $0 == "_" || $0 == "/" }
+        let letters = words.prefix(3).compactMap(\.first).map { String($0).uppercased() }
+        return letters.isEmpty ? String(name.prefix(1)).uppercased() : letters.joined()
+    }
+
+    /// The alarm hasn't been answered yet — no wake-up, snooze, or late signal recorded.
+    private func isNotCompleted(_ status: RTStatus) -> Bool {
+        status == .waiting || status == .noResponse
+    }
+
+    /// Filled dot for a recorded status; a hollow (outlined) dot for "not completed"
+    /// so an unanswered alarm reads as clearly different from a real result.
+    @ViewBuilder
+    private func statusDot(_ status: RTStatus, size: CGFloat) -> some View {
+        if isNotCompleted(status) {
+            Circle().strokeBorder(RT.inkFaint, lineWidth: 2).frame(width: size, height: size)
+        } else {
+            Circle().fill(status.chipColor).frame(width: size, height: size)
+        }
+    }
+
+    private func legend(_ color: Color, _ label: String, filled: Bool = true) -> some View {
         HStack(spacing: 6) {
-            Circle().fill(color).frame(width: 8, height: 8)
+            Group {
+                if filled {
+                    Circle().fill(color).frame(width: 8, height: 8)
+                } else {
+                    Circle().strokeBorder(color, lineWidth: 1.5).frame(width: 8, height: 8)
+                }
+            }
             Text(label)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(RT.inkSecondary)
@@ -175,19 +273,31 @@ struct RTProfileView: View {
     private var settings: some View {
         VStack(spacing: 0) {
             Button { showDashboard = true } label: {
-                settingRowContent("Accountability dashboard", trailing: "›")
+                settingRowContent("Rise Reports", trailing: "›")
             }
             .buttonStyle(.plain)
             .sheet(isPresented: $showDashboard) {
                 RTDashboardView(groupId: nil)
             }
             Divider().overlay(RT.divider)
-            Button { showHowItWorks = true } label: {
-                settingRowContent("How WhoZup works", trailing: "›")
-            }
-            .buttonStyle(.plain)
-            .sheet(isPresented: $showHowItWorks) {
-                RTHowItWorksSheet(type: nil)
+            if repository.eventsLifetime {
+                settingRowContent("Unlimited events", trailing: "Active ✓")
+            } else if let lifetime = eventPackStore.lifetimeProduct {
+                // Only offer the purchase when the real StoreKit product loaded —
+                // never a fallback price behind a button that can't complete.
+                Button {
+                    Task { _ = await eventPackStore.purchaseLifetime() }
+                } label: {
+                    settingRowContent(
+                        "Unlimited events",
+                        trailing: eventPackStore.isPurchasing ? "Purchasing…" : lifetime.displayPrice
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(eventPackStore.isPurchasing)
+            } else {
+                // Product not available (not configured/approved, or offline).
+                settingRowContent("Unlimited events", trailing: "Unavailable")
             }
             Divider().overlay(RT.divider)
             ShareLink(item: URL(string: appLink)!, message: Text("Try whoZup with me — we keep each other on time.")) {
@@ -200,24 +310,170 @@ struct RTProfileView: View {
             }
             .buttonStyle(.plain)
             Divider().overlay(RT.divider)
-            settingRowContent("Restore purchases", trailing: "›")
+            Button(action: restorePurchases) {
+                settingRowContent(
+                    "Restore purchases",
+                    trailing: eventPackStore.isRestoring ? "Restoring…" : "›"
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(eventPackStore.isRestoring)
             Divider().overlay(RT.divider)
             Button {
-                authManager.signOut()
+                if !isSigningOut && !isDeleting { showSignOutConfirm = true }
             } label: {
                 HStack {
-                    Text("Sign out")
+                    Text(isSigningOut ? "Signing out…" : "Sign out")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(RT.dotLate)
+                    Spacer()
+                    if isSigningOut { ProgressView() }
+                }
+                .padding(.vertical, 15)
+                .padding(.horizontal, 16)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isSigningOut || isDeleting)
+            Divider().overlay(RT.divider)
+            Button {
+                if !isDeleting && !isSigningOut { showDeleteConfirm = true }
+            } label: {
+                HStack {
+                    Text("Delete account")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(RT.dotLate)
                     Spacer()
                 }
                 .padding(.vertical, 15)
                 .padding(.horizontal, 16)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(isDeleting || isSigningOut)
         }
         .background(RoundedRectangle(cornerRadius: 20).fill(RT.card))
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(RT.cardBorder, lineWidth: 1))
+        .alert("Sign out of WhoZup?", isPresented: $showSignOutConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Sign out", role: .destructive) { signOut() }
+        } message: {
+            // Firestore keeps unsent writes on this phone, per account: they go
+            // out only when this account is signed in here again with internet.
+            if repository.hasPendingStatusSyncs {
+                Text("Some of your alarm updates haven't synced yet. Connect to the internet first so your group sees them — otherwise they'll stay on this phone until you sign back in to this account here.")
+            } else {
+                Text("Are you sure you want to sign out of your account?")
+            }
+        }
+        .alert("Couldn't delete account", isPresented: Binding(get: { deleteError != nil }, set: { if !$0 { deleteError = nil } })) {
+            Button("OK", role: .cancel) { deleteError = nil }
+        } message: {
+            Text(deleteError ?? "")
+        }
+    }
+
+    /// Full-screen center alert + tap-blocker for sign-out / delete. Hosted on the
+    /// root view (not the settings card) so the dimmed backdrop and centered card
+    /// cover the whole screen — attached to the small card, `.ignoresSafeArea()`
+    /// could only expand within that card's frame, leaving the popup over the
+    /// bottom options.
+    @ViewBuilder private var accountActionOverlay: some View {
+        // Sign-out is quick and uses the native alert; while it runs, block
+        // interaction so no further action can be taken after confirming.
+        if isSigningOut {
+            Color.black.opacity(0.001)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .allowsHitTesting(true)
+        }
+        // Custom center alert for delete: a native `.alert` button can't show a
+        // spinner, and the user wants the loader ON the Delete button. While
+        // deleting, the button becomes a spinner, Cancel is disabled, and the
+        // dimmed backdrop blocks all other interaction. On success the account is
+        // gone → auth state flips to nil → the app drops straight to the sign-in
+        // screen (this whole view is replaced), so no manual dismissal is needed.
+        if showDeleteConfirm {
+            ZStack {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { if !isDeleting { showDeleteConfirm = false } }
+                VStack(spacing: 0) {
+                    VStack(spacing: 10) {
+                        Text("Delete your account?")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(RT.ink)
+                        Text("This permanently deletes your account, removes you from all your groups, and erases your data. This can't be undone.")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(RT.inkMuted)
+                            .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(20)
+                    Divider().overlay(RT.divider)
+                    HStack(spacing: 0) {
+                        Button { showDeleteConfirm = false } label: {
+                            Text("Cancel")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(RT.ink)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 14)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isDeleting)
+                        Divider().frame(height: 52).overlay(RT.divider)
+                        Button { deleteAccount() } label: {
+                            Group {
+                                if isDeleting {
+                                    ProgressView().tint(RT.dotLate)
+                                } else {
+                                    Text("Delete account")
+                                        .font(.system(size: 16, weight: .bold))
+                                        .foregroundStyle(RT.dotLate)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isDeleting)
+                    }
+                }
+                .frame(maxWidth: 300)
+                .background(RoundedRectangle(cornerRadius: 20).fill(RT.card))
+                .overlay(RoundedRectangle(cornerRadius: 20).stroke(RT.cardBorder, lineWidth: 1))
+                .shadow(color: .black.opacity(0.2), radius: 20, y: 8)
+                .padding(40)
+            }
+        }
+    }
+
+    private func signOut() {
+        isSigningOut = true
+        Task {
+            await authManager.signOut()
+        }
+    }
+
+    private func deleteAccount() {
+        isDeleting = true
+        Task {
+            // Data first (the writes need auth), then the Auth account itself.
+            await repository.deleteAccountData()
+            let ok = await authManager.deleteAccount()
+            isDeleting = false
+            // On success the Auth user is gone → `authManager.user` becomes nil →
+            // WhoZupApp swaps RTRootView for AuthView, so the app lands on the
+            // sign-in screen directly and this alert is torn down with it. Only
+            // on failure do we dismiss the alert and surface the error.
+            if !ok {
+                showDeleteConfirm = false
+                deleteError = authManager.errorMessage ?? "Please try again."
+            }
+        }
     }
 
     private func settingRowContent(_ title: String, trailing: String) -> some View {

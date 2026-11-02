@@ -69,6 +69,13 @@ enum RTStatus: String {
         }
     }
 
+    /// Colour in the Rise Report timeline, which has three outcome buckets —
+    /// woke up, snoozed, late — matching its counters and legend. A late wake-up
+    /// counts as late there (red), even though its chip elsewhere reads amber.
+    var reportColor: Color {
+        self == .runningLate ? RTStatus.silentLate.chipColor : chipColor
+    }
+
     var chipBackground: Color {
         switch self {
         case .wokeUp: return Color(hex: "#e3f3ec")
@@ -120,9 +127,22 @@ struct RTMember: Identifiable {
     let status: RTStatus
     let detail: String
     let alarm: String?
+    /// True when this member's own status was recorded locally but hasn't yet
+    /// synced to the server (offline write, still in Firestore's pending queue).
+    /// Only ever set for your own row — pending writes are inherently local.
+    var pendingSync: Bool = false
 
     var displayName: String { isYou ? "You" : name }
     var displayAvatarColor: Color { isYou ? RT.ink : avatarColor }
+}
+
+/// Today's alarm for a group that has rung without a response from you —
+/// offered on the group screens so you can record what actually happened.
+struct RTPendingCheckIn: Equatable {
+    let groupId: String
+    /// Local "HH:mm" the alarm rang at.
+    let time: String
+    let fireDate: Date
 }
 
 /// A summary dot + label shown on list cards ("3 up", "1 snoozed", …).
@@ -138,6 +158,8 @@ struct RTEventInfo {
     let place: String
     let etas: [String]
     let date: Date?
+    /// When the event ends. Past this, the event is treated as completed.
+    let endDate: Date?
 
     /// e.g. "Sat, Jul 5 · 7:00 PM", or empty when no date is set.
     var whenLabel: String {
@@ -145,9 +167,21 @@ struct RTEventInfo {
         return date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()
             .hour().minute())
     }
+
+    /// True once the event's end time has passed.
+    var isCompleted: Bool {
+        guard let endDate else { return false }
+        return endDate < Date()
+    }
+
+    /// Short "ends 8:30 PM" / "ended Jul 5" label for the detail screen.
+    var endLabel: String {
+        guard let endDate else { return "" }
+        return endDate.formatted(.dateTime.month(.abbreviated).day().hour().minute())
+    }
 }
 
-/// What a shared group's wake-up time means when members are in different
+/// What a shared group's alarm time means when members are in different
 /// time zones. Only meaningful for `.shared` groups: an accountability alarm is
 /// each member's own, and an event already has an absolute timestamp.
 enum RTAlarmAnchor: String, CaseIterable, Identifiable {
@@ -201,13 +235,16 @@ struct RTGroup: Identifiable {
     let alarmSourceZone: TimeZone?
     /// The original wall-clock time in `alarmSourceZone`, for the same purpose.
     let alarmSourceTime: String?
-    /// How this group's wake-up is interpreted across zones.
+    /// How this group's alarm is interpreted across zones.
     let alarmAnchor: RTAlarmAnchor
     /// Days the alarm rings (`1=Sunday … 7=Saturday`). Empty means every day.
     let alarmDays: [Int]
     /// A single (non-recurring) shared alarm that rings once on the next
     /// occurrence of the time. False for the usual recurring alarm.
     let alarmOnce: Bool
+    let detailedDescription: String?
+    /// Admin nudges already sent for this event; gates the max-2 reminder cap.
+    let reminderCount: Int
 
     init(
         id: String,
@@ -224,9 +261,13 @@ struct RTGroup: Identifiable {
         alarmSourceTime: String? = nil,
         alarmAnchor: RTAlarmAnchor = .localTime,
         alarmDays: [Int] = [],
-        alarmOnce: Bool = false
+        alarmOnce: Bool = false,
+        detailedDescription: String? = nil,
+        reminderCount: Int = 0
     ) {
+        self.reminderCount = reminderCount
         self.alarmOnce = alarmOnce
+        self.detailedDescription = detailedDescription
         self.alarmAnchor = alarmAnchor
         self.id = id
         self.type = type
@@ -276,8 +317,10 @@ struct RTGroup: Identifiable {
     }
 
     /// Members who haven't responded (events) — used to gate the admin nudge.
+    /// Excludes the current user: you never nudge yourself, even if you haven't
+    /// responded to your own event.
     var nonResponders: [RTMember] {
-        roster.filter { $0.status == .noResponse }
+        roster.filter { $0.status == .noResponse && !$0.isYou }
     }
 
     var metaLine: String {
@@ -285,12 +328,11 @@ struct RTGroup: Identifiable {
         case .accountability:
             return alarm.isEmpty ? "Your own alarm" : "Your alarm · \(alarmDisplay)"
         case .shared:
-            return alarm.isEmpty ? "Shared wake-up" : "Wakes \(alarmDisplay) · set by \(admin ?? "admin")"
+            return alarm.isEmpty ? "Group alarm" : "Rings \(alarmDisplay) · set by \(admin ?? "admin")"
         case .event:
             guard let event else { return "" }
-            let when = event.whenLabel
-            if !when.isEmpty { return when }
-            return event.title
+            let when = event.whenLabel.isEmpty ? event.title : event.whenLabel
+            return event.isCompleted ? "✓ Completed · \(when)" : when
         }
     }
 
@@ -322,7 +364,7 @@ struct RTGroup: Identifiable {
     }
 
     var detailAlarmLabel: String {
-        type == .accountability ? "Your alarm" : "Shared wake-up"
+        type == .accountability ? "Your alarm" : "Group alarm"
     }
 
     var detailAlarmMeta: String {

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<!-- Bind this custom UI to the event RSVP category the app registers
+			     and the Cloud Functions send (`aps.category`). -->
+			<key>UNNotificationExtensionCategory</key>
+			<string>EVENT_REMINDER_CATEGORY</string>
+			<!-- Hide the default banner body; our view shows the title/body. -->
+			<key>UNNotificationExtensionDefaultContentHidden</key>
+			<true/>
+			<!-- Enables tap handling on our custom buttons (respond without
+			     opening the app). -->
+			<key>UNNotificationExtensionUserInteractionEnabled</key>
+			<true/>
+			<!-- Initial height as a ratio of width; the grid needs some room. -->
+			<key>UNNotificationExtensionInitialContentSizeRatio</key>
+			<real>0.6</real>
+		</dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.usernotifications.content-extension</string>
+		<!-- Programmatic UI (no storyboard). -->
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).NotificationViewController</string>
+	</dict>
+</dict>
+</plist>

@@ -28,14 +28,31 @@ final class GroupRepository {
     private(set) var isLoading = false
     private(set) var lastError: String?
 
+    /// True when one or more of your own status responses were recorded locally
+    /// (e.g. dismissing an alarm offline) but haven't synced to the server yet.
+    /// Drives the app-wide "syncs pending" banner; clears automatically once
+    /// Firestore flushes the queued writes.
+    private(set) var hasPendingStatusSyncs = false
+
     /// Lifetime count of events this user has *created* — the basis for the
     /// free-event quota. Monotonic: deleting an event never refunds it, and
     /// events you merely joined don't count. 0 until the usage doc loads.
     private(set) var eventsCreatedCount = 0
     private(set) var eventPackBalance = 0
+    /// True once the user has bought the lifetime "unlimited events" unlock.
+    private(set) var eventsLifetime = false
+
+    static let freeEventLimit = 5
 
     var canCreateEvent: Bool {
-        eventsCreatedCount < 5 || eventPackBalance > 0
+        eventsLifetime || eventsCreatedCount < Self.freeEventLimit || eventPackBalance > 0
+    }
+
+    /// Events the user can still create — free allowance left plus any purchased
+    /// pack balance. `nil` means unlimited (lifetime unlock).
+    var eventsRemaining: Int? {
+        if eventsLifetime { return nil }
+        return max(0, Self.freeEventLimit - eventsCreatedCount) + eventPackBalance
     }
 
     @ObservationIgnored
@@ -60,6 +77,10 @@ final class GroupRepository {
     private var rawGroups: [String: FirestoreGroup] = [:]
     private var members: [String: [GroupMemberDoc]] = [:]
     private var statuses: [String: [MemberStatusDoc]] = [:]
+    /// gid → uids whose status doc has an unsynced local write pending. Sourced
+    /// from Firestore snapshot metadata (`hasPendingWrites`), which the model
+    /// data itself doesn't carry, so it's tracked alongside `statuses`.
+    private var pendingStatuses: [String: Set<String>] = [:]
 
     // Our own member doc for a group we just created, kept until the members
     // listener delivers it. A freshly-created group's members listener can miss
@@ -94,6 +115,7 @@ final class GroupRepository {
                     self.usageDocExists = snap?.exists ?? false
                     self.eventsCreatedCount = (snap?.data()?["eventsCreated"] as? Int) ?? 0
                     self.eventPackBalance = (snap?.data()?["eventPackBalance"] as? Int) ?? 0
+                    self.eventsLifetime = (snap?.data()?["eventsLifetime"] as? Bool) ?? false
                     self.seedUsageIfNeeded()
                 }
             }
@@ -104,10 +126,11 @@ final class GroupRepository {
         usageListener?.remove(); usageListener = nil
         memberListeners.values.forEach { $0.remove() }; memberListeners.removeAll()
         statusListeners.values.forEach { $0.remove() }; statusListeners.removeAll()
-        rawGroups.removeAll(); members.removeAll(); statuses.removeAll(); pendingOwnMember.removeAll()
+        rawGroups.removeAll(); members.removeAll(); statuses.removeAll(); pendingStatuses.removeAll(); pendingOwnMember.removeAll()
         groups = []
         eventsCreatedCount = 0
         eventPackBalance = 0
+        eventsLifetime = false
         usageLoaded = false; usageDocExists = false; seedingUsage = false
         currentUid = nil
     }
@@ -144,6 +167,7 @@ final class GroupRepository {
             memberListeners[goneID]?.remove(); memberListeners[goneID] = nil
             statusListeners[goneID]?.remove(); statusListeners[goneID] = nil
             rawGroups[goneID] = nil; members[goneID] = nil; statuses[goneID] = nil
+            pendingStatuses[goneID] = nil
         }
 
         for group in decoded {
@@ -170,11 +194,18 @@ final class GroupRepository {
                 }
         }
         if statusListeners[gid] == nil {
+            // includeMetadataChanges so the has-pending-writes → synced flip
+            // fires an update and the "Not synced" marker clears on its own once
+            // an offline write reaches the server.
             statusListeners[gid] = db.collection("groups").document(gid).collection("statuses")
-                .addSnapshotListener { [weak self] snap, _ in
+                .addSnapshotListener(includeMetadataChanges: true) { [weak self] snap, _ in
                     Task { @MainActor in
-                        self?.statuses[gid] = snap?.documents.compactMap { try? $0.data(as: MemberStatusDoc.self) } ?? []
-                        self?.rebuild()
+                        guard let self else { return }
+                        self.statuses[gid] = snap?.documents.compactMap { try? $0.data(as: MemberStatusDoc.self) } ?? []
+                        self.pendingStatuses[gid] = Set(
+                            snap?.documents.filter { $0.metadata.hasPendingWrites }.map(\.documentID) ?? []
+                        )
+                        self.rebuild()
                     }
                 }
         }
@@ -182,10 +213,11 @@ final class GroupRepository {
 
     /// Rebuilds the `RTGroup` list from raw docs + members + statuses.
     private func rebuild() {
-        guard let uid = currentUid else { groups = []; return }
+        guard let uid = currentUid else { groups = []; hasPendingStatusSyncs = false; return }
         groups = rawGroups.values
             .sorted { ($0.createdAt?.dateValue() ?? .distantPast) < ($1.createdAt?.dateValue() ?? .distantPast) }
             .compactMap { buildRTGroup($0, uid: uid) }
+        hasPendingStatusSyncs = pendingStatuses.values.contains { !$0.isEmpty }
         seedUsageIfNeeded()
     }
 
@@ -199,19 +231,75 @@ final class GroupRepository {
         let statusDocs = statuses[gid] ?? []
         let type = g.groupType
 
+        // Local wall-clock of a shared group's alarm, used by the skipped-alarm
+        // check below. Mirrors the display-alarm conversion done further down: a
+        // same-moment alarm set in another zone is read in this device's zone.
+        let sharedLocalAlarm: String? = {
+            guard type == .shared, let a = g.alarmTime, !a.isEmpty else { return nil }
+            if g.anchor == .sameMoment, let zoneID = g.alarmTimeZone,
+               let zone = TimeZone(identifier: zoneID),
+               zone.identifier != TimeZone.current.identifier {
+                return RTAlarmTime.localTime(of: a, in: zone)
+            }
+            return a
+        }()
+
         func memberFor(_ memberUid: String) -> RTMember {
             let doc = memberDocs.first { $0.id == memberUid }
             let statusDoc = statusDocs.first { $0.id == memberUid }
             let isYou = memberUid == uid
-            let status: RTStatus = statusDoc.map { RTStatus(storageKey: $0.status) }
-                ?? (type == .event ? .noResponse : .waiting)
             let initials = doc?.initials ?? String((doc?.displayName ?? "?").prefix(1)).uppercased()
             let colorHex = doc?.avatarColorHex ?? RTAvatarPalette.hex(for: memberUid)
-            let baseDetail = statusDoc?.detail ?? (type == .event ? "hasn't replied" : "no update yet")
+
+            // Judged by when the member answered, not when it reached the
+            // server — an offline answer that syncs the next day still counts
+            // for the day it was made (and doesn't masquerade as today's).
+            let isStatusFromToday: Bool
+            if let answeredAt = statusDoc?.effectiveTime {
+                isStatusFromToday = Self.dayKey(answeredAt) == Self.dayKey()
+            } else {
+                isStatusFromToday = (statusDoc != nil)
+            }
+
+            var status: RTStatus
+            var baseDetail: String
+            if type != .event && !isStatusFromToday {
+                status = .waiting
+                baseDetail = "no update yet"
+            } else {
+                status = statusDoc.map { RTStatus(storageKey: $0.status) }
+                    ?? (type == .event ? .noResponse : .waiting)
+                baseDetail = statusDoc?.detail ?? (type == .event ? "hasn't replied" : "no update yet")
+            }
+
+            // Skipped-alarm fallback: if today's alarm slot has no response and
+            // its deadline has already passed, show the member as silent-late —
+            // even when their own device never recorded it (phone off, app never
+            // ran). Their device writes the authoritative status when it next
+            // reconciles; until then this keeps the roster honest. Recurring
+            // accountability/shared alarms only.
+            if type != .event, status == .waiting {
+                let alarmTime = type == .accountability ? doc?.alarmTime : sharedLocalAlarm
+                let alarmDays = (type == .accountability ? doc?.alarmDays : g.alarmDays) ?? []
+                let once = type == .shared && (g.alarmOnce ?? false)
+                let lateWindow = TimeInterval((g.lateThresholdMinutes ?? 15) * 60)
+                // The alarm only counts from when it was set: a member's own
+                // `alarmSetAt` (accountability) or the group's (shared), falling
+                // back to when the group was created. This keeps a just-created
+                // alarm whose time already passed today from showing as missed.
+                let notBefore = (type == .accountability ? doc?.alarmSetAt : g.alarmSetAt)?.dateValue()
+                    ?? g.createdAt?.dateValue()
+                if let alarmTime, !alarmTime.isEmpty, !once,
+                   MissedAlarm.isTodayMissed(time: alarmTime, days: alarmDays,
+                                             lateWindow: lateWindow, notBefore: notBefore) {
+                    status = .silentLate
+                    baseDetail = "no response"
+                }
+            }
             // For accountability, prepend the member's own alarm time.
             let detail: String
             if type == .accountability, let a = doc?.alarmTime, !a.isEmpty {
-                detail = "\(a) AM · \(baseDetail)"
+                detail = "\(RTAlarmTime.display(a)) · \(baseDetail)"
             } else {
                 detail = baseDetail
             }
@@ -224,7 +312,8 @@ final class GroupRepository {
                 avatarColor: Color(hex: colorHex),
                 status: status,
                 detail: detail,
-                alarm: doc?.alarmTime
+                alarm: doc?.alarmTime,
+                pendingSync: isYou && (pendingStatuses[gid]?.contains(memberUid) ?? false)
             )
         }
 
@@ -237,7 +326,8 @@ final class GroupRepository {
                 title: g.eventTitle ?? "",
                 place: g.eventPlace ?? "",
                 etas: ["+15", "+30", "+45"],
-                date: g.eventAt?.dateValue()
+                date: g.eventAt?.dateValue(),
+                endDate: g.eventEndAt?.dateValue()
             )
             : nil
 
@@ -287,7 +377,9 @@ final class GroupRepository {
             alarmSourceTime: sourceTime,
             alarmAnchor: g.anchor,
             alarmDays: days,
-            alarmOnce: type == .shared && (g.alarmOnce ?? false)
+            alarmOnce: type == .shared && (g.alarmOnce ?? false),
+            detailedDescription: g.detailedDescription,
+            reminderCount: g.reminderCount ?? 0
         )
     }
 
@@ -333,7 +425,9 @@ final class GroupRepository {
         alarmOnce: Bool = false,
         eventTitle: String? = nil,
         eventPlace: String? = nil,
-        eventAt: Date? = nil
+        eventAt: Date? = nil,
+        eventEndAt: Date? = nil,
+        detailedDescription: String? = nil
     ) async -> String? {
         guard let uid = currentUid else { return nil }
         if type == .event && !canCreateEvent {
@@ -352,6 +446,9 @@ final class GroupRepository {
             "createdBy": uid,
             "createdAt": FieldValue.serverTimestamp(),
         ]
+        if let detailedDescription, !detailedDescription.isEmpty {
+            payload["detailedDescription"] = detailedDescription
+        }
         // For shared groups the alarm lives on the group; for accountability the
         // creator's own alarm lives on their member doc (written below).
         if type == .shared, let alarmTime {
@@ -359,11 +456,13 @@ final class GroupRepository {
             payload["alarmTimeZone"] = TimeZone.current.identifier
             payload["alarmAnchor"] = alarmAnchor.rawValue
             payload["alarmOnce"] = alarmOnce
+            payload["alarmSetAt"] = FieldValue.serverTimestamp()
             if !alarmDays.isEmpty { payload["alarmDays"] = alarmDays.sorted() }
         }
         if let eventTitle { payload["eventTitle"] = eventTitle }
         if let eventPlace { payload["eventPlace"] = eventPlace }
         if let eventAt { payload["eventAt"] = Timestamp(date: eventAt) }
+        if let eventEndAt { payload["eventEndAt"] = Timestamp(date: eventEndAt) }
         if type != .event { payload["lateThresholdMinutes"] = 15 }
 
         do {
@@ -505,9 +604,13 @@ final class GroupRepository {
         do {
             try await db.collection("groups").document(groupId)
                 .collection("members").document(uid)
-                .setData(["alarmTime": time, "alarmDays": days.sorted()], merge: true)
+                .setData([
+                    "alarmTime": time,
+                    "alarmDays": days.sorted(),
+                    "alarmSetAt": FieldValue.serverTimestamp(),
+                ], merge: true)
             await writeActivity(groupId: groupId, kind: "alarm_changed",
-                                message: "\(currentDisplayName) set their alarm to \(time) AM")
+                                message: "\(currentDisplayName) set their alarm to \(RTAlarmTime.display(time))")
         } catch {
             lastError = error.localizedDescription
         }
@@ -526,12 +629,13 @@ final class GroupRepository {
             "alarmAnchor": anchor.rawValue,
             "alarmDays": days.sorted(),
             "alarmOnce": once,
+            "alarmSetAt": FieldValue.serverTimestamp(),
         ]
         do {
             try await db.collection("groups").document(groupId).updateData(fields)
             await refreshInvitePreview(groupId: groupId, fields: fields)
             await writeActivity(groupId: groupId, kind: "alarm_changed",
-                                message: "\(currentDisplayName) changed the wake-up to \(time) AM")
+                                message: "\(currentDisplayName) changed the alarm to \(RTAlarmTime.display(time))")
         } catch {
             lastError = error.localizedDescription
         }
@@ -670,6 +774,28 @@ final class GroupRepository {
         }
     }
 
+    /// Removes the signed-in user from every group and deletes their profile and
+    /// FCM token — the data side of account deletion. A group the user solely
+    /// admins (with other members) is deleted outright, since it can't be left
+    /// orphaned; every other group is simply left. Best-effort per group so one
+    /// failure doesn't abort the rest. The Auth account itself is deleted by
+    /// `AuthManager.deleteAccount` after this.
+    func deleteAccountData() async {
+        guard let uid = currentUid else { return }
+        // Snapshot ids first — leaving/deleting mutates the live `groups` list.
+        for id in groups.map(\.id) {
+            guard let g = rawGroups[id] else { continue }
+            let soleAdmin = g.adminUids.contains(uid) && g.adminUids.count <= 1 && g.memberUids.count > 1
+            if soleAdmin {
+                _ = await deleteGroup(groupId: id)
+            } else {
+                _ = await leaveGroup(groupId: id)
+            }
+        }
+        try? await db.collection("users").document(uid).delete()
+        try? await db.collection("fcmTokens").document(uid).delete()
+    }
+
     /// Deletes a group outright (admins only). This removes it for **everyone**:
     /// each member's live query stops returning it, so their `RTAlarmSync`
     /// cancels the associated on-device alarm on the next reconcile. With no
@@ -714,7 +840,13 @@ final class GroupRepository {
 
     /// Writes/updates the current user's status in a group. When `activity` is
     /// provided, also appends an activity entry so the whole group is notified.
-    /// Returns whether the write succeeded.
+    ///
+    /// The writes are queued, not awaited: `setData` lands in Firestore's
+    /// on-disk queue immediately (and the live roster updates from the local
+    /// cache), then syncs when the network allows. Awaiting the server ack used
+    /// to stall here offline — and since the history write only started after
+    /// that ack, a response made offline could reach the roster but never the
+    /// Rise Report. Returns false only when nobody is signed in.
     @discardableResult
     func setMyStatus(groupId: String, status: RTStatus, detail: String, eta: String? = nil, activity: String? = nil) async -> Bool {
         guard let uid = currentUid else {
@@ -724,43 +856,342 @@ final class GroupRepository {
         var payload: [String: Any] = [
             "status": status.storageKey,
             "detail": detail,
+            "respondedAt": Timestamp(date: Date()),
             "updatedAt": FieldValue.serverTimestamp(),
         ]
         if let eta { payload["eta"] = eta }
-        do {
-            try await db.collection("groups").document(groupId)
-                .collection("statuses").document(uid).setData(payload)
-            lastError = nil
-            await recordHistory(groupId: groupId, uid: uid, status: status, detail: detail)
-            if let activity {
-                await writeActivity(groupId: groupId, kind: "response", message: activity)
+        db.collection("groups").document(groupId)
+            .collection("statuses").document(uid)
+            .setData(payload) { [weak self] error in
+                guard let error else { return }
+                Task { @MainActor in self?.lastError = error.localizedDescription }
             }
-            return true
-        } catch {
-            lastError = error.localizedDescription
-            return false
+        lastError = nil
+        recordHistory(groupId: groupId, uid: uid, status: status, detail: detail)
+        if let activity {
+            await writeActivity(groupId: groupId, kind: "response", message: activity)
         }
+        return true
     }
 
+    /// Alarm outcomes that belong in a member's per-day history (the Rise
+    /// Report). `runningLate` is included: a late dismiss is a real wake-up and
+    /// must show as late — leaving it out made the report show a gap for that
+    /// day, which the missed-alarm reconcile then back-filled as "no response".
+    static let historyStatuses: Set<RTStatus> = [.wokeUp, .snoozed, .runningLate, .silentLate]
+
     /// Appends today's alarm outcome to the member's per-day history, which
-    /// backs the accountability dashboard. Only real wake-up outcomes are kept —
-    /// event RSVPs and the neutral "waiting" state aren't accountability data.
-    /// Best-effort: a missed history write must never fail the status update.
-    private func recordHistory(groupId: String, uid: String, status: RTStatus, detail: String) async {
-        guard [.wokeUp, .snoozed, .silentLate].contains(status) else { return }
+    /// backs the Rise Report. Alarm groups only — an event's "running late" RSVP
+    /// shares a status with a late wake-up but isn't accountability data.
+    /// Replaces the day's doc so a real response clears an earlier automatic
+    /// mark. Queued like the status write; best-effort.
+    private func recordHistory(groupId: String, uid: String, status: RTStatus, detail: String, extra: [String: Any] = [:]) {
+        guard Self.historyStatuses.contains(status),
+              rawGroups[groupId]?.groupType != .event else { return }
         let day = Self.dayKey()
-        do {
-            try await db.collection("groups").document(groupId)
-                .collection("members").document(uid)
-                .collection("history").document(day)
+        var data: [String: Any] = [
+            "status": status.storageKey,
+            "detail": detail,
+            "date": day,
+            "respondedAt": Timestamp(date: Date()),
+            "updatedAt": FieldValue.serverTimestamp(),
+        ]
+        data.merge(extra) { _, new in new }
+        db.collection("groups").document(groupId)
+            .collection("members").document(uid)
+            .collection("history").document(day)
+            .setData(data) { [weak self] error in
+                guard let error else { return }
+                self?.logger.error("history write failed: \(error.localizedDescription, privacy: .public)")
+            }
+    }
+
+    // MARK: - Manual check-in
+
+    /// Today's alarm slot for this group that has already rung but has no
+    /// response from you — the case where tapping Stop/Snooze didn't reach the
+    /// app (or the alarm was silenced some other way). The group screens offer
+    /// to record what happened. Nil when there's nothing to fill in.
+    ///
+    /// Counts as "no response": no status since the alarm fired, or only the
+    /// automatic "no response" mark the app writes for a skipped alarm. A real
+    /// response — including the ring screen's own timeout — closes it.
+    func pendingCheckIn(groupId: String, now: Date = Date()) -> RTPendingCheckIn? {
+        guard let uid = currentUid, let raw = rawGroups[groupId],
+              let group = group(id: groupId),
+              group.type == .accountability || group.type == .shared,
+              !group.alarm.isEmpty
+        else { return nil }
+
+        let setAt = (group.type == .accountability
+            ? members[groupId]?.first { $0.id == uid }?.alarmSetAt
+            : raw.alarmSetAt)?.dateValue()
+        let fire: Date?
+        if group.alarmOnce {
+            // A one-time alarm rings at the first occurrence after it was set.
+            fire = setAt.flatMap { Self.firstOccurrence(of: group.alarm, after: $0) }
+        } else {
+            fire = MissedAlarm.mostRecentFire(time: group.alarm, days: group.alarmDays, now: now, lookbackDays: 0)
+        }
+        guard let fire, fire <= now, Calendar.current.isDate(fire, inSameDayAs: now) else { return nil }
+        // You can't have missed an alarm that rang before you had it.
+        if let floor = setAt ?? raw.createdAt?.dateValue(), fire < floor { return nil }
+
+        if let doc = statuses[groupId]?.first(where: { $0.id == uid }) {
+            let automatic = doc.auto == true && doc.status == RTStatus.silentLate.storageKey
+            // A legacy unsynced write has no time at all yet, so it's from now.
+            let respondedSinceFire = doc.effectiveTime.map { $0 >= fire.addingTimeInterval(-60) } ?? true
+            if respondedSinceFire && !automatic { return nil }
+        }
+        return RTPendingCheckIn(groupId: groupId, time: group.alarm, fireDate: fire)
+    }
+
+    /// Records what happened to today's alarm, as told by the member. Applies to
+    /// every alarm group that shares the slot and is still awaiting a check-in —
+    /// they were all one alarm on the phone, so one answer covers them all.
+    @discardableResult
+    func recordManualCheckIn(groupId: String, status: RTStatus) async -> Bool {
+        guard let uid = currentUid, status == .wokeUp || status == .snoozed,
+              let target = pendingCheckIn(groupId: groupId) else { return false }
+        let covered = groups.compactMap { pendingCheckIn(groupId: $0.id) }
+            .filter { $0.time == target.time }
+        let detail = status == .wokeUp ? "woke up · marked in app" : "snoozed · marked in app"
+        let verb = status == .wokeUp ? "woke up" : "snoozed"
+        for item in covered {
+            db.collection("groups").document(item.groupId)
+                .collection("statuses").document(uid)
                 .setData([
                     "status": status.storageKey,
                     "detail": detail,
-                    "date": day,
+                    "manual": true,
+                    "respondedAt": Timestamp(date: Date()),
                     "updatedAt": FieldValue.serverTimestamp(),
-                ], merge: true)
-        } catch {
-            logger.error("history write failed: \(error.localizedDescription, privacy: .public)")
+                ]) { [weak self] error in
+                    guard let error else { return }
+                    Task { @MainActor in self?.lastError = error.localizedDescription }
+                }
+            recordHistory(groupId: item.groupId, uid: uid, status: status, detail: detail, extra: ["manual": true])
+            await writeActivity(groupId: item.groupId, kind: "response",
+                                message: "\(currentDisplayName) marked that they \(verb)")
+        }
+        // Answered here, so withdraw the "Did you wake up?" notification for it.
+        if let group = group(id: groupId) {
+            await AlarmReliability.checkInAnsweredInApp(slotKey: RTAlarmSync.slotKey(for: group), fire: target.fireDate)
+        }
+        return !covered.isEmpty
+    }
+
+    /// The first time "HH:mm" occurs at or after `date`, in this device's zone.
+    private static func firstOccurrence(of time: String, after date: Date) -> Date? {
+        let parts = time.split(separator: ":")
+        guard let hour = parts.first.flatMap({ Int($0) }) else { return nil }
+        let minute = parts.count > 1 ? (Int(parts[1]) ?? 0) : 0
+        var comps = DateComponents()
+        comps.hour = hour
+        comps.minute = minute
+        return Calendar.current.nextDate(after: date.addingTimeInterval(-1), matching: comps, matchingPolicy: .nextTime)
+    }
+
+    // MARK: - Skipped-alarm reconciliation
+
+    /// Marks *skipped* alarms as silent-late.
+    ///
+    /// A status is normally only recorded in reaction to a real action (dismiss/
+    /// snooze) or the ring UI's no-response timer — all of which need the app to
+    /// run. When the device is switched off (or the alarm rings natively and is
+    /// never touched) across the alarm's deadline, nothing records the miss and
+    /// the slot stays blank forever. This is the counterpart: on launch and
+    /// foreground each device reconciles its *own* recent slots — for any
+    /// past-deadline day with no recorded outcome it writes `silent_late` to
+    /// that day's history, and for *today* also updates the live status doc so
+    /// the rest of the group sees it.
+    ///
+    /// Own alarms only (you can only write your own status), recurring
+    /// accountability/shared alarms only, bounded to the last `lookbackDays`
+    /// days and never earlier than the first day this device saw the group.
+    func reconcileMissedAlarms(lookbackDays: Int = 7) async {
+        guard let uid = currentUid else { return }
+        let now = Date()
+        let todayKey = Self.dayKey(now)
+        let startOfToday = Calendar.current.startOfDay(for: now)
+
+        for group in groups where group.type == .accountability || group.type == .shared {
+            // A one-time shared alarm has no recoverable past fire date from a
+            // bare "HH:mm", so we can't tell a miss from "never scheduled".
+            if group.type == .shared, group.alarmOnce { continue }
+            let time = group.alarm    // already this device's local wall-clock
+            guard !time.isEmpty else { continue }
+
+            // The group's configured late window (the same "limit" the ring UI's
+            // auto-snooze path uses before going silent), defaulting to 15 min.
+            let lateWindow = TimeInterval((rawGroups[group.id]?.lateThresholdMinutes ?? 15) * 60)
+            let missed = MissedAlarm.missedOccurrences(
+                time: time, days: group.alarmDays, now: now,
+                lookbackDays: lookbackDays, lateWindow: lateWindow
+            )
+            guard !missed.isEmpty else { continue }
+
+            // Never mark a day from before we first knew about this group — a
+            // freshly-joined member wasn't accountable for last week — nor before
+            // the alarm was actually set (so a just-set alarm whose time already
+            // passed today isn't retroactively marked missed for today).
+            let deviceFloor = missedReconcileFloor(for: group.id, uid: uid, startOfToday: startOfToday)
+            let alarmFloor = (group.type == .accountability
+                ? members[group.id]?.first { $0.id == uid }?.alarmSetAt
+                : rawGroups[group.id]?.alarmSetAt)?.dateValue()
+                ?? rawGroups[group.id]?.createdAt?.dateValue()
+            let floor = max(deviceFloor, alarmFloor ?? .distantPast)
+            let eligible = missed.filter { $0.fireDate >= floor }
+            guard !eligible.isEmpty else { continue }
+
+            let earliestKey = eligible.map(\.dayKey).min() ?? todayKey
+            let recorded = await recordedHistoryDays(groupId: group.id, uid: uid, from: earliestKey)
+            // A status recorded today means the user did respond — including a
+            // *late* dismiss, which maps to running-late and is deliberately not
+            // written to history. Without this guard that response would be
+            // overwritten as silent-late today.
+            let respondedToday = statusRecordedToday(groupId: group.id, uid: uid)
+
+            // `recorded` is only a cheap pre-filter. It can come back short — a
+            // swallowed query error, or an offline/partial cache — and trusting
+            // it is exactly what overwrote real "woke up" days as late. The
+            // writes below re-check each doc on the server and never replace one.
+            for occ in eligible where !recorded.contains(occ.dayKey) {
+                if occ.dayKey == todayKey {
+                    if respondedToday { continue }
+                    // Today's miss also updates the live status doc so the group
+                    // sees it now — but only once history confirmed the day was empty.
+                    if await writeSilentLateHistoryIfAbsent(groupId: group.id, uid: uid, dayKey: occ.dayKey) {
+                        await markTodaySilentLateStatusIfUnanswered(groupId: group.id, uid: uid, fire: occ.fireDate)
+                    }
+                } else {
+                    await writeSilentLateHistoryIfAbsent(groupId: group.id, uid: uid, dayKey: occ.dayKey)
+                }
+            }
+        }
+    }
+
+    /// The earliest day this device is willing to back-fill for `gid` — the
+    /// first day it ever reconciled the group, persisted so a member who joined
+    /// recently isn't retroactively marked late for days they weren't in.
+    ///
+    /// Keyed by account as well as group: a different account signing in on
+    /// this device starts its own floor rather than inheriting the previous
+    /// account's history with the group.
+    private func missedReconcileFloor(for gid: String, uid: String, startOfToday: Date) -> Date {
+        let key = "whozup.missedFloor.\(uid).\(gid)"
+        let defaults = UserDefaults.standard
+        if let stored = defaults.object(forKey: key) as? Date { return stored }
+        defaults.set(startOfToday, forKey: key)
+        return startOfToday
+    }
+
+    /// The set of day keys in `[from, today]` for which this user already has a
+    /// recorded alarm outcome (any history doc), read from cache-or-server.
+    private func recordedHistoryDays(groupId: String, uid: String, from startKey: String) async -> Set<String> {
+        let q = db.collection("groups").document(groupId)
+            .collection("members").document(uid)
+            .collection("history")
+            .whereField("date", isGreaterThanOrEqualTo: startKey)
+        guard let snap = try? await q.getDocuments() else { return [] }
+        return Set(snap.documents.map(\.documentID))
+    }
+
+    /// Writes a silent-late outcome to one day's history **only if that day has
+    /// no outcome on the server**. Returns whether it wrote.
+    ///
+    /// An automatic mark is a guess; a real response is a fact, so the guess
+    /// must never replace the fact. The existence check and the write happen in
+    /// one transaction against the server, so a response that already landed —
+    /// or lands concurrently — always wins. Offline the transaction fails and
+    /// nothing is written: the live roster already shows "no response", and the
+    /// next reconcile with a connection back-fills the day.
+    @discardableResult
+    private func writeSilentLateHistoryIfAbsent(groupId: String, uid: String, dayKey: String) async -> Bool {
+        let ref = db.collection("groups").document(groupId)
+            .collection("members").document(uid)
+            .collection("history").document(dayKey)
+        let wrote = try? await withTimeout(.seconds(10)) { [db] in
+            (try await db.runTransaction { tx, errorPointer -> Any? in
+                do {
+                    if try tx.getDocument(ref).exists { return false }
+                } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+                tx.setData([
+                    "status": RTStatus.silentLate.storageKey,
+                    "detail": "no response",
+                    "date": dayKey,
+                    "auto": true,
+                    "updatedAt": FieldValue.serverTimestamp(),
+                ], forDocument: ref)
+                return true
+            }) as? Bool == true
+        }
+        return wrote == true
+    }
+
+    /// Whether this user already has a status recorded *today* — i.e. they
+    /// responded (status docs are only written on a real response, never for the
+    /// derived "waiting" default), or an earlier reconcile already marked them.
+    private func statusRecordedToday(groupId: String, uid: String) -> Bool {
+        // A response written while offline still has a `null` server timestamp
+        // locally, so `updatedAt` alone can't see it — and without this the
+        // missed-alarm reconcile would read "no response today" and overwrite a
+        // real, just-made dismiss/snooze/late response with silent-late, losing
+        // the user's action. A pending own-status write is exactly that unsynced
+        // response, so treat it as recorded today. (A `runningLate` response,
+        // which writes no history doc, relies on this guard entirely once synced.)
+        if pendingStatuses[groupId]?.contains(uid) == true { return true }
+        guard let answeredAt = statuses[groupId]?.first(where: { $0.id == uid })?.effectiveTime
+        else { return false }
+        return Self.dayKey(answeredAt) == Self.dayKey()
+    }
+
+    /// Sets today's live status doc to silent-late, unless the server copy shows
+    /// a real answer since the alarm fired. Checked in a transaction for the same
+    /// reason as `writeSilentLateHistoryIfAbsent`: the in-memory `statuses` can be
+    /// empty (a background task's fresh repository) and must not be read as
+    /// "no answer".
+    private func markTodaySilentLateStatusIfUnanswered(groupId: String, uid: String, fire: Date) async {
+        if statusRecordedToday(groupId: groupId, uid: uid) { return }
+        let ref = db.collection("groups").document(groupId).collection("statuses").document(uid)
+        _ = try? await withTimeout(.seconds(10)) { [db] in
+            _ = try await db.runTransaction { tx, errorPointer -> Any? in
+                let snap: DocumentSnapshot
+                do { snap = try tx.getDocument(ref) } catch {
+                    errorPointer?.pointee = error as NSError
+                    return nil
+                }
+                let answeredAt = (snap.get("respondedAt") as? Timestamp ?? snap.get("updatedAt") as? Timestamp)?.dateValue()
+                let realAnswer = snap.exists && (snap.get("auto") as? Bool) != true
+                    && (answeredAt.map { $0 >= fire.addingTimeInterval(-60) } ?? false)
+                if realAnswer { return nil }
+                tx.setData([
+                    "status": RTStatus.silentLate.storageKey,
+                    "detail": "no response",
+                    "auto": true,
+                    "respondedAt": Timestamp(date: Date()),
+                    "updatedAt": FieldValue.serverTimestamp(),
+                ], forDocument: ref)
+                return nil
+            }
+        }
+    }
+
+    /// Runs `operation`, giving up after `timeout` so an offline reconcile
+    /// (whose transactions retry until the network returns) can't stall.
+    private func withTimeout<T: Sendable>(_ timeout: Duration, _ operation: @escaping @Sendable () async throws -> T) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                throw CancellationError()
+            }
+            defer { group.cancelAll() }
+            guard let first = try await group.next() else { throw CancellationError() }
+            return first
         }
     }
 
@@ -788,7 +1219,19 @@ final class GroupRepository {
                 result[uid] = RTStatus(storageKey: s)
             }
         }
+        if day == Self.dayKey() { overlayLiveOutcomes(groupId: groupId) { uid, s in result[uid] = s } }
         return result
+    }
+
+    /// Today's outcome per member as the live roster shows it, so the Rise
+    /// Report agrees with the group screen. History can briefly trail the live
+    /// status (a write still syncing) or not exist yet (another member's device
+    /// hasn't reconciled a skipped alarm, which the roster already derives as
+    /// "no response"); the live view is the fresher of the two for today.
+    private func overlayLiveOutcomes(groupId: String, apply: (String, RTStatus) -> Void) {
+        for member in group(id: groupId)?.roster ?? [] where Self.historyStatuses.contains(member.status) {
+            apply(member.uid, member.status)
+        }
     }
 
     /// Each member's outcomes across a month (uid → [dayKey → status]), for the
@@ -812,6 +1255,10 @@ final class GroupRepository {
                 result[uid] = days
             }
         }
+        let today = Self.dayKey()
+        if today.hasPrefix(monthPrefix) {
+            overlayLiveOutcomes(groupId: groupId) { uid, s in result[uid, default: [:]][today] = s }
+        }
         return result
     }
 
@@ -832,6 +1279,29 @@ final class GroupRepository {
         return await setMyStatus(groupId: groupId, status: status, detail: detail, eta: eta, activity: message)
     }
 
+    /// Admin nudge: ask the `sendEventReminder` Cloud Function to push every
+    /// non-responder (excluding the admin). Writing a trigger doc — rather than
+    /// calling a callable — keeps the client free of the Functions SDK and lets
+    /// the server stay authoritative for the max-2 cap. The resulting
+    /// `reminderCount` bump on the group doc flows back through the live
+    /// listener, so the "N left" label updates on its own.
+    @discardableResult
+    func sendReminder(groupId: String) async -> Bool {
+        guard let uid = currentUid else { return false }
+        do {
+            _ = try await db.collection("groups").document(groupId)
+                .collection("reminders")
+                .addDocument(data: [
+                    "byUid": uid,
+                    "createdAt": FieldValue.serverTimestamp(),
+                ])
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
     func group(id: String) -> RTGroup? { groups.first { $0.id == id } }
 
     func groups(of type: RTGroupType) -> [RTGroup] { groups.filter { $0.type == type } }
@@ -840,56 +1310,49 @@ final class GroupRepository {
 
     // MARK: - Alarm bridge
 
-    /// Maps a scheduled AlarmKit alarm's UUID to every group it covers, so a
-    /// real dismiss/snooze on that alarm can be persisted to Firestore.
-    ///
-    /// One-to-many because groups sharing a wake-up time share a single alarm
-    /// (see `RTAlarmSync`): dismissing 06:30 once means you woke up for every
-    /// 06:30 group at the same moment.
-    private var alarmGroupMap: [UUID: [String]] = [:]
-
-    /// Wires an `AlarmStatusRecorder` so real alarm actions write the derived
-    /// status to every group behind that alarm. Call once at app start.
+    /// Wires an `AlarmStatusRecorder` so an alarm action seen in-process (the
+    /// app is running when the user taps Stop/Snooze) is written too. It goes
+    /// through the same `AlarmActionHandler` as the alarm's AppIntents, which
+    /// derives the status against the right occurrence, fans it out to every
+    /// group behind the alarm, and drops the duplicate when both paths report
+    /// the same tap. Call once at app start.
     func bindAlarmRecorder(_ recorder: AlarmStatusRecorder) {
-        recorder.onRecorded = { [weak self] alarmID, result in
-            guard let self, let groupIds = self.alarmGroupMap[alarmID], !groupIds.isEmpty else { return }
-            let rt = Self.rtStatus(from: result.status)
-            // Computed once so every group records the same wake-up time rather
-            // than drifting by however long the writes take.
-            let detail = Self.detail(for: rt)
+        recorder.onRecorded = { alarmID, result in
             Task {
-                for groupId in groupIds {
-                    await self.setMyStatus(groupId: groupId, status: rt, detail: detail)
-                }
+                await AlarmActionHandler.capture(
+                    alarmID: alarmID, kind: result.action.kind, at: result.action.timestamp
+                )
             }
         }
     }
 
-    /// Associates an alarm UUID with every group it covers, before scheduling it.
-    func registerAlarm(alarmID: UUID, groupIds: [String]) {
-        alarmGroupMap[alarmID] = groupIds
-    }
-
-    /// Forgets an alarm's group mapping. Call when cancelling it, so a reused
-    /// or stale UUID can't write a status to groups it no longer covers.
-    func unregisterAlarm(alarmID: UUID) {
-        alarmGroupMap[alarmID] = nil
-    }
+    /// The signed-in uid this repository is serving, stamped onto persisted
+    /// alarm records so a response can only ever be written for that account.
+    var signedInUid: String? { currentUid }
 
     static func rtStatus(from status: MemberStatus) -> RTStatus {
         switch status {
         case .respondedOnTime: return .wokeUp
         case .snoozed: return .snoozed
+        case .respondedLate: return .runningLate
         case .silentLate: return .silentLate
         case .pending: return .waiting
         }
     }
 
-    static func detail(for status: RTStatus) -> String {
-        let time = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .short)
+    /// The status line, stamped with when the person answered — `at` matters
+    /// for a response replayed later from the journal.
+    static func detail(for status: RTStatus, at date: Date = Date()) -> String {
+        // Force 12-hour AM/PM rather than the device's short-time style, which is
+        // 24-hour on some locales — WhoZup shows wake-up times as AM/PM everywhere.
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US")
+        f.dateFormat = "h:mm a"
+        let time = f.string(from: date)
         switch status {
         case .wokeUp: return "up at \(time)"
         case .snoozed: return "snoozed"
+        case .runningLate: return "up late at \(time)"
         case .silentLate: return "no dismiss or snooze"
         default: return ""
         }
@@ -905,7 +1368,11 @@ final class GroupRepository {
             "avatarColorHex": RTAvatarPalette.hex(for: uid),
             "role": role,
         ]
-        if let alarmTime { data["alarmTime"] = alarmTime }
+        if let alarmTime {
+            data["alarmTime"] = alarmTime
+            // Floor for the missed-alarm check — the alarm only applies from now.
+            data["alarmSetAt"] = FieldValue.serverTimestamp()
+        }
         if !alarmDays.isEmpty { data["alarmDays"] = alarmDays.sorted() }
         try await db.collection("groups").document(groupId)
             .collection("members").document(uid).setData(data, merge: true)
@@ -916,17 +1383,18 @@ final class GroupRepository {
     /// Cloud Function.
     private func writeActivity(groupId: String, kind: String, message: String) async {
         guard let uid = currentUid else { return }
-        do {
-            try await db.collection("groups").document(groupId).collection("activity").addDocument(data: [
-                "kind": kind,
-                "message": message,
-                "actorUid": uid,
-                "createdAt": FieldValue.serverTimestamp(),
-            ])
-        } catch {
+        // Queued, not awaited, so an offline device isn't held up waiting for a
+        // server ack; Firestore keeps queued writes in order and syncs them later.
+        db.collection("groups").document(groupId).collection("activity").addDocument(data: [
+            "kind": kind,
+            "message": message,
+            "actorUid": uid,
+            "createdAt": FieldValue.serverTimestamp(),
+        ]) { [weak self] error in
             // Best-effort notification feed — never surface as a user-facing
             // error or block the primary write that triggered it.
-            logger.error("activity write failed: \(error.localizedDescription, privacy: .public)")
+            guard let error else { return }
+            self?.logger.error("activity write failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 

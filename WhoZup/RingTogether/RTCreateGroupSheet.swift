@@ -17,6 +17,7 @@ struct RTCreateGroupSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var name = ""
+    @State private var detailedDescription = ""
     @State private var alarmTime = Calendar.current.date(bySettingHour: 6, minute: 30, second: 0, of: Date()) ?? Date()
     // Defaults to local time: for a wake-up alarm "06:30" almost always means
     // 06:30 in your own morning, and getting that wrong wakes someone at 1 AM.
@@ -28,6 +29,8 @@ struct RTCreateGroupSheet: View {
     @State private var eventTitle = ""
     @State private var eventPlace = ""
     @State private var eventAt = Calendar.current.date(byAdding: .hour, value: 3, to: Date()) ?? Date()
+    @State private var hasEndTime = true
+    @State private var eventEndAt = Calendar.current.date(byAdding: .hour, value: 5, to: Date()) ?? Date()
     @State private var isWorking = false
     @State private var createdCode: String?
     @State private var showAddMembers = false
@@ -56,9 +59,12 @@ struct RTCreateGroupSheet: View {
                 fieldLabel("Group name")
                 styledField(placeholder: namePlaceholder, text: $name)
 
+                fieldLabel("Description (optional)")
+                styledField(placeholder: "e.g. Purpose of the group, rules, or details", text: $detailedDescription)
+
                 switch type {
                 case .accountability, .shared:
-                    fieldLabel(type == .accountability ? "Your wake-up time" : "Shared wake-up time")
+                    fieldLabel(type == .accountability ? "Your alarm time" : "Group alarm time")
                     wheelTime($alarmTime)
                     if type == .shared {
                         fieldLabel("Schedule")
@@ -114,6 +120,36 @@ struct RTCreateGroupSheet: View {
 
                     fieldLabel("Event time")
                     wheelTime($eventAt)
+
+                    fieldLabel("Ends")
+                    VStack(spacing: 0) {
+                        Toggle(isOn: $hasEndTime) {
+                            Text("Set an end time")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(RT.inkSecondary)
+                        }
+                        .tint(type.accent)
+                        .onChange(of: eventAt) { _, newStart in
+                            if eventEndAt <= newStart {
+                                eventEndAt = Calendar.current.date(byAdding: .hour, value: 2, to: newStart) ?? newStart
+                            }
+                        }
+                        if hasEndTime {
+                            Divider().padding(.vertical, 12)
+                            HStack {
+                                Text("On")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(RT.inkSecondary)
+                                Spacer()
+                                DatePicker("", selection: $eventEndAt, in: eventAt..., displayedComponents: [.date, .hourAndMinute])
+                                    .labelsHidden()
+                                    .tint(type.accent)
+                            }
+                        }
+                    }
+                    .padding(16)
+                    .background(RoundedRectangle(cornerRadius: 16).fill(RT.card))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(RT.cardBorder, lineWidth: 1))
                 }
 
                 if let error = repository.lastError {
@@ -170,6 +206,9 @@ struct RTCreateGroupSheet: View {
         DatePicker("", selection: binding, displayedComponents: .hourAndMinute)
             .datePickerStyle(.wheel)
             .labelsHidden()
+            // Force a 12-hour AM/PM wheel regardless of the device's 24-hour
+            // setting — clearer for an alarm and consistent with everywhere else.
+            .environment(\.locale, Locale(identifier: "en_US"))
             .frame(maxWidth: .infinity)
             .tint(type.accent)
             .padding(.horizontal, 8)
@@ -190,8 +229,8 @@ struct RTCreateGroupSheet: View {
 
     private var badgeLabel: String {
         switch type {
-        case .accountability: return "Accountability"
-        case .shared: return "Shared"
+        case .accountability: return "Check-ins"
+        case .shared: return "In Sync"
         case .event: return "Event"
         }
     }
@@ -216,6 +255,7 @@ struct RTCreateGroupSheet: View {
         isWorking = true
         defer { isWorking = false }
         let trimmedName = name.trimmingCharacters(in: .whitespaces)
+        let trimmedDesc = detailedDescription.trimmingCharacters(in: .whitespaces)
         let code: String?
         switch type {
         case .accountability, .shared:
@@ -224,14 +264,17 @@ struct RTCreateGroupSheet: View {
                 alarmTime: RTAlarmTime.string(from: alarmTime),
                 alarmAnchor: alarmAnchor,
                 alarmDays: repeats ? (selectedDays.count == RTWeekday.all.count ? [] : Array(selectedDays)) : [],
-                alarmOnce: type == .shared && !repeats
+                alarmOnce: type == .shared && !repeats,
+                detailedDescription: trimmedDesc
             )
         case .event:
             code = await repository.createGroup(
                 type: type, name: trimmedName,
                 eventTitle: eventTitle.trimmingCharacters(in: .whitespaces),
                 eventPlace: eventPlace.trimmingCharacters(in: .whitespaces),
-                eventAt: eventAt
+                eventAt: eventAt,
+                eventEndAt: hasEndTime ? eventEndAt : nil,
+                detailedDescription: trimmedDesc
             )
         }
         if let code {

@@ -2,7 +2,7 @@
 //  AlarmDeduplicationTests.swift
 //  WhoZupTests
 //
-//  Covers the rule that groups sharing a wake-up time share one alarm, so the
+//  Covers the rule that groups sharing an alarm time share one alarm, so the
 //  phone rings once at 06:30 no matter how many 06:30 groups you're in.
 //
 

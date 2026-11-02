@@ -10,8 +10,19 @@
 //  `AlarmManager.alarmUpdates`. This recorder diffs consecutive snapshots:
 //
 //    - `.alerting` → gone            ⇒ the user stopped the alarm ⇒ dismiss
+//    - `.alerting` → `.scheduled`    ⇒ stopped a *repeating* alarm ⇒ dismiss
 //    - `.alerting` → `.countdown`    ⇒ the user snoozed           ⇒ snooze
-//    - `.countdown` → gone           ⇒ stopped during snooze      ⇒ dismiss
+//    - `.countdown` → gone/scheduled ⇒ stopped during snooze      ⇒ dismiss
+//
+//  Per `AlarmManager.stop(id:)`: a one-shot alarm is deleted when stopped, but a
+//  repeating one is "rescheduled to alert … at the next scheduled time" — it
+//  goes back to `.scheduled` rather than disappearing. WhoZup's alarms are
+//  almost all weekly, so missing that transition missed most in-app stops.
+//
+//  This is also the only path that sees a stop made *without* the Stop button
+//  (e.g. the alerting banner swiped away while unlocked, which reportedly skips
+//  `stopIntent`) — but only while the app process is alive. When it isn't, the
+//  check-in notification in `AlarmCheckInNotifier` is the safety net.
 //
 //  Persisting the derived status anywhere (backend, local store) is
 //  explicitly out of scope here — a later issue wires this up for real.
@@ -59,7 +70,8 @@ public enum AlarmTransitionMapper {
         return previous.compactMap { old in
             let new = currentByID[old.id]
             switch (old.state, new?.state) {
-            case (.alerting, nil), (.countdown, nil):
+            case (.alerting, nil), (.countdown, nil),
+                 (.alerting, .scheduled), (.countdown, .scheduled):
                 return AlarmTransition(alarmID: old.id, kind: .dismiss)
             case (.alerting, .countdown):
                 return AlarmTransition(alarmID: old.id, kind: .snooze)
@@ -99,8 +111,9 @@ public final class AlarmStatusRecorder: ObservableObject {
     private let lateWindow: TimeInterval
     private let logger = Logger(subsystem: "com.whozup.WhoZup", category: "AlarmStatusRecorder")
 
-    /// - Parameter lateWindow: Passed through to `StatusDerivation.status`.
-    public init(lateWindow: TimeInterval = 10 * 60) {
+    /// - Parameter lateWindow: Passed through to `StatusDerivation.status`. A
+    ///   response after this window marks the member late rather than on time.
+    public init(lateWindow: TimeInterval = 15 * 60) {
         self.lateWindow = lateWindow
     }
 
@@ -168,12 +181,9 @@ public final class AlarmStatusRecorder: ObservableObject {
             lateWindow: lateWindow
         )
 
-        // A dismiss ends the alarm's lifecycle; a snoozed alarm will re-alert
-        // and its eventual dismiss should still derive against the original
-        // scheduled time.
-        if kind == .dismiss {
-            scheduledTimes[alarmID] = nil
-        }
+        // The registration is kept after a dismiss: WhoZup alarms repeat weekly,
+        // so the same id rings again on the next scheduled day and must still be
+        // recognised. Only a programmatic cancel (`unregister`) forgets it.
 
         let result = AlarmActionResult(action: action, status: status)
         lastResult = result

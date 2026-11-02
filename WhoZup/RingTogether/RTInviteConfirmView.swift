@@ -134,7 +134,7 @@ struct RTInviteConfirmView: View {
                 detailRow("Group type", typeLabel(invite.previewGroupType), accent: accent)
                 if let alarm = invite.localAlarmTime {
                     Divider().overlay(RT.divider)
-                    detailRow("Wake-up", RTAlarmTime.display(alarm), accent: accent)
+                    detailRow("Alarm Time", RTAlarmTime.display(alarm), accent: accent)
                 }
                 if let title = invite.eventTitle, !title.isEmpty {
                     Divider().overlay(RT.divider)
@@ -206,8 +206,8 @@ struct RTInviteConfirmView: View {
 
     private func typeLabel(_ type: RTGroupType) -> String {
         switch type {
-        case .accountability: return "Accountability"
-        case .shared: return "Shared wake-up"
+        case .accountability: return "Check-ins"
+        case .shared: return "In Sync"
         case .event: return "Event"
         }
     }

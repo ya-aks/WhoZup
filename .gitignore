@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Xcode build output and per-user state
+build/
+build-*/
+buildDerivedData/
+DerivedData/
+*.xcarchive/
+xcuserdata/
+
+# Firebase
+.firebase/
+functions/node_modules/

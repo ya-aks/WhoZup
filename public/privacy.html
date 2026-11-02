@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — WhoZup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #F6F1E8;
+      --card-bg: #FFFDF8;
+      --card-border: #EEE7D9;
+      --ink: #2C2A26;
+      --ink-secondary: #6F6A61;
+      --ink-muted: #8B857A;
+      --accent: #3F6FA3;
+      --accent-soft: #E4EEF5;
+      --event-accent: #D98C3A;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg);
+      color: var(--ink);
+      line-height: 1.6;
+      padding: 40px 20px;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 40px 48px;
+      box-shadow: 0 8px 24px rgba(44, 42, 38, 0.04);
+    }
+
+    .header {
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 24px;
+      margin-bottom: 32px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 800;
+      font-size: 22px;
+      color: var(--accent);
+      margin-bottom: 16px;
+      text-decoration: none;
+    }
+
+    .brand-badge {
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--ink);
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+
+    .meta {
+      font-size: 14px;
+      color: var(--ink-muted);
+      font-weight: 500;
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--ink);
+      margin-top: 32px;
+      margin-bottom: 12px;
+    }
+
+    p {
+      font-size: 15px;
+      color: var(--ink-secondary);
+      margin-bottom: 16px;
+    }
+
+    ul {
+      margin-bottom: 20px;
+      padding-left: 24px;
+    }
+
+    li {
+      font-size: 15px;
+      color: var(--ink-secondary);
+      margin-bottom: 8px;
+    }
+
+    li strong {
+      color: var(--ink);
+    }
+
+    .highlight-box {
+      background: var(--accent-soft);
+      border: 1px solid rgba(63, 111, 163, 0.2);
+      border-radius: 16px;
+      padding: 20px;
+      margin: 24px 0;
+    }
+
+    .highlight-box p {
+      color: var(--accent);
+      font-weight: 600;
+      margin-bottom: 0;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: underline;
+    }
+
+    a:hover {
+      opacity: 0.8;
+    }
+
+    .footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--card-border);
+      font-size: 13px;
+      color: var(--ink-muted);
+      text-align: center;
+    }
+
+    @media (max-width: 600px) {
+      body {
+        padding: 16px 12px;
+      }
+      .container {
+        padding: 24px 20px;
+        border-radius: 18px;
+      }
+      h1 {
+        font-size: 26px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <a href="#" class="brand">
+        ⏰ WhoZup <span class="brand-badge">Privacy & Security</span>
+      </a>
+      <h1>Privacy Policy</h1>
+      <div class="meta">Effective Date: September 16, 2026 | Last Updated: September 16, 2026</div>
+    </div>
+
+    <div class="highlight-box">
+      <p>💡 Summary: WhoZup is built on privacy and trust. We do not sell your data, we do not track your location in the background, and your alarm status is only shared with group members you explicitly join.</p>
+    </div>
+
+    <h2>1. Introduction</h2>
+    <p>Welcome to <strong>WhoZup</strong> ("we," "our," or "us"). WhoZup is a social alarm and event accountability application designed to help individuals, partners, and groups wake up and show up on time together.</p>
+    <p>This Privacy Policy explains how we collect, use, store, and protect your personal information when you use the WhoZup mobile applications (iOS and Android) and related services.</p>
+
+    <h2>2. Information We Collect</h2>
+    <p>We collect only the essential information needed to provide social alarm functionality and account synchronization:</p>
+    <ul>
+      <li><strong>Account & Profile Information:</strong> When you register or set up your profile, we collect your First Name, Last Name (optional), Email Address, or Phone Number depending on your sign-in method (Email, Google Sign-In, Sign in with Apple, or Phone OTP).</li>
+      <li><strong>Group & Alarm Status:</strong> Your status within your joined groups (e.g., Woke Up, Snoozed, Silent/Late, Coming, Running Late) and set alarm times. This data is visible only to members of the specific groups you join.</li>
+      <li><strong>Device & Push Notification Tokens:</strong> Firebase Cloud Messaging (FCM) and Apple Push Notification service (APNs) device tokens required to deliver alarm pings and group event reminders to your phone.</li>
+    </ul>
+
+    <h2>3. How We Use Your Information</h2>
+    <p>We use the collected information exclusively for the following purposes:</p>
+    <ul>
+      <li>To authenticate your identity and maintain your account.</li>
+      <li>To synchronize alarm times and show real-time wake-up/RSVP statuses to your group members.</li>
+      <li>To send high-priority push notifications and alarm reminders.</li>
+      <li>To maintain reliable performance and debug technical issues.</li>
+    </ul>
+    <p><strong>We do NOT sell, rent, or share your personal data with third-party advertisers or data brokers.</strong></p>
+
+    <h2>4. Third-Party Services</h2>
+    <p>WhoZup relies on industry-standard Google Cloud / Firebase infrastructure for authentication, database, and push notification delivery:</p>
+    <ul>
+      <li><strong>Firebase Authentication & Cloud Firestore:</strong> Secured cloud data storage and authentication.</li>
+      <li><strong>Google Sign-In & Sign in with Apple:</strong> Secure third-party authentication providers.</li>
+    </ul>
+
+    <h2>5. Data Retention & Account Deletion</h2>
+    <p>You retain full control over your data:</p>
+    <ul>
+      <li>You can edit your name or leave any group at any time within the app.</li>
+      <li>If you wish to permanently delete your account and associated data from our servers, you can initiate account deletion inside the WhoZup app settings or contact support. Upon request, all user records will be purged within 30 days.</li>
+    </ul>
+
+    <h2>6. Children's Privacy</h2>
+    <p>WhoZup does not knowingly collect personal information from children under 13 years of age. If we learn that we have collected information from a child under 13, we will promptly delete it.</p>
+
+    <h2>7. Security</h2>
+    <p>We enforce strict security rules via Firebase Security Rules and transport-layer encryption (HTTPS/TLS) to protect your profile data and group memberships against unauthorized access.</p>
+
+    <h2>8. Changes to This Policy</h2>
+    <p>We may update this Privacy Policy from time to time. Any updates will be posted on this page with an updated "Last Updated" date.</p>
+
+    <h2>9. Contact Us</h2>
+    <p>If you have any questions or concerns regarding this Privacy Policy or your data, please contact us directly through the WhoZup app support settings or at <strong>support@whozup.app</strong>.</p>
+
+    <div class="footer">
+      &copy; 2026 Evident Innovators. All rights reserved.
+    </div>
+  </div>
+</body>
+</html>

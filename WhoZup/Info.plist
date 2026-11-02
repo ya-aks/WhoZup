@@ -16,6 +16,16 @@
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>CFBundleURLName</key>
+			<string>firebase.auth.recaptcha</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>app-1-1009092925495-ios-64407bfa63d1c37e95c7b2</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
 			<string>app.whozup.invite</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
@@ -24,6 +34,17 @@
 		</dict>
 	</array>
 	<key>NSAlarmKitUsageDescription</key>
-	<string>WhoZup schedules alarms on this device so your group can see when you wake up.</string>
+	<string>WhoZup schedules alarms on this device so your group can see when your alarm rings.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+		<string>remote-notification</string>
+	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.whozup.reconcileMissed</string>
+		<string>com.whozup.syncPending</string>
+	</array>
 </dict>
 </plist>

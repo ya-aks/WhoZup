@@ -53,7 +53,7 @@ struct ContentView: View {
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(role: .destructive) {
-                        authManager.signOut()
+                        Task { await authManager.signOut() }
                     } label: {
                         Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
                     }

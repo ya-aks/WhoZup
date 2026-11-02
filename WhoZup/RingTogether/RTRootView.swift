@@ -17,7 +17,9 @@ enum RTTab: String, CaseIterable {
 struct RTRootView: View {
     @Environment(AuthManager.self) private var authManager
     @Environment(PendingInviteStore.self) private var pendingInvite
+    @Environment(PendingGroupStore.self) private var pendingGroup
     @Environment(\.alarmScheduler) private var alarmScheduler
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var alarmStatusRecorder: AlarmStatusRecorder
     @State private var repository = GroupRepository()
     @State private var alarmSync: RTAlarmSync?
@@ -43,7 +45,12 @@ struct RTRootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            RTTabBar(selected: $tab)
+            VStack(spacing: 0) {
+                if repository.hasPendingStatusSyncs {
+                    RTSyncPendingBanner()
+                }
+                RTTabBar(selected: $tab)
+            }
         }
         .environment(repository)
         .sheet(isPresented: $showTipSheet) {
@@ -59,6 +66,12 @@ struct RTRootView: View {
             RTInviteConfirmView(code: pending.id) { pendingInvite.clear() }
                 .environment(repository)
         }
+        // A tapped notification parks a group id; switch to that group's tab so
+        // its list (which then pushes the detail) is the one on screen. Re-run
+        // when groups load, in case the tap cold-started the app before the
+        // repository had the group.
+        .onChange(of: pendingGroup.groupId) { _, _ in switchTabForPendingGroup() }
+        .onChange(of: repository.groups.map(\.id)) { _, _ in switchTabForPendingGroup() }
         .onAppear {
             repository.bindAlarmRecorder(alarmStatusRecorder)
             if alarmSync == nil {
@@ -82,7 +95,23 @@ struct RTRootView: View {
             }
         }
         .task(id: RTAlarmSync.signature(for: repository.groups)) {
+            // Write any alarm response that couldn't be written when it happened.
+            await AlarmActionHandler.drainJournal()
             await alarmSync?.reconcile()
+            // Back-fill any alarms that were skipped while the app wasn't running
+            // (device off, never dismissed) — mark them silent-late after the
+            // deadline, since nothing else would.
+            await repository.reconcileMissedAlarms()
+        }
+        // Coming back to the foreground can cross an alarm's deadline while the
+        // app sat in the background, so re-check for skipped alarms then too.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task {
+                    await AlarmReliability.sweep()
+                    await repository.reconcileMissedAlarms()
+                }
+            }
         }
         // Crossing a time zone changes what a shared group's wake-up means
         // locally. Rebuilding re-converts every alarm, which moves the sync
@@ -96,6 +125,37 @@ struct RTRootView: View {
             }
         }
     }
+
+    private func switchTabForPendingGroup() {
+        guard let id = pendingGroup.groupId, let group = repository.group(id: id) else { return }
+        switch group.type {
+        case .accountability: tab = .accountability
+        case .shared: tab = .shared
+        case .event: tab = .events
+        }
+    }
+}
+
+/// App-wide notice shown just above the tab bar (so it's visible on every tab)
+/// whenever one of your status responses is recorded locally but not yet synced.
+/// Purely informational — Firestore syncs the queued write automatically once
+/// the device is back online, which clears the banner.
+struct RTSyncPendingBanner: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 13, weight: .bold))
+            Text("Some status updates are pending — connect to the internet to sync.")
+                .font(.system(size: 12, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(Color(hex: "#7a4f0a"))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(hex: "#fbeed6"))
+    }
 }
 
 /// Custom bottom tab bar matching the design's glyphs (outline circle, filled
@@ -105,8 +165,8 @@ struct RTTabBar: View {
 
     var body: some View {
         HStack {
-            tabItem(.accountability, "Accountability")
-            tabItem(.shared, "Shared")
+            tabItem(.accountability, "Check-ins")
+            tabItem(.shared, "In Sync")
             tabItem(.events, "Events")
             tabItem(.more, "More")
         }

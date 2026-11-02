@@ -13,10 +13,44 @@
 		74B0A55AD5C82A3F7200A433 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6322061D09FC0FC9616FB02E /* FirebaseCore */; };
 		B2ED6E088A5C45F45DCF828A /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = D167938F612C7E618957CEA4 /* FirebaseMessaging */; };
 		B3BA0503FC564014803F3725 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 569D7B47EF43B9FBC8DDF68F /* GoogleSignInSwift */; };
+		DA0AA6583022D73C00FE1360 /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DA0AA6573022D73C00FE1360 /* UserNotifications.framework */; };
+		DA0AA65A3022D73C00FE1360 /* UserNotificationsUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DA0AA6593022D73C00FE1360 /* UserNotificationsUI.framework */; };
+		DA0AA6643022D73C00FE1360 /* WhoZupNotifications.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = DA0AA6553022D73C00FE1360 /* WhoZupNotifications.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		DA0AA66B3022DC1D00FE1360 /* FirebaseAI in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA66A3022DC1D00FE1360 /* FirebaseAI */; };
+		DA0AA66D3022DC1D00FE1360 /* FirebaseAILogic in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA66C3022DC1D00FE1360 /* FirebaseAILogic */; };
+		DA0AA66F3022DC1D00FE1360 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA66E3022DC1D00FE1360 /* FirebaseAnalytics */; };
+		DA0AA6713022DC1D00FE1360 /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6703022DC1D00FE1360 /* FirebaseAnalyticsCore */; };
+		DA0AA6733022DC1D00FE1360 /* FirebaseAnalyticsIdentitySupport in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6723022DC1D00FE1360 /* FirebaseAnalyticsIdentitySupport */; };
+		DA0AA6753022DC1D00FE1360 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6743022DC1D00FE1360 /* FirebaseAppCheck */; };
+		DA0AA6773022DC1D00FE1360 /* FirebaseAppDistribution-Beta in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6763022DC1D00FE1360 /* FirebaseAppDistribution-Beta */; };
+		DA0AA6793022DC1D00FE1360 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6783022DC1D00FE1360 /* FirebaseAuth */; };
+		DA0AA67B3022DC1D00FE1360 /* FirebaseAuthCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA67A3022DC1D00FE1360 /* FirebaseAuthCombine-Community */; };
+		DA0AA67D3022DC1D00FE1360 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA67C3022DC1D00FE1360 /* FirebaseCore */; };
+		DA0AA67F3022DC1D00FE1360 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA67E3022DC1D00FE1360 /* FirebaseCrashlytics */; };
+		DA0AA6813022DC1D00FE1360 /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6803022DC1D00FE1360 /* FirebaseDatabase */; };
+		DA0AA6833022DC1D00FE1360 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6823022DC1D00FE1360 /* FirebaseFirestore */; };
+		DA0AA6853022DC1D00FE1360 /* FirebaseFirestoreCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6843022DC1D00FE1360 /* FirebaseFirestoreCombine-Community */; };
+		DA0AA6873022DC1D00FE1360 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6863022DC1D00FE1360 /* FirebaseFunctions */; };
+		DA0AA6893022DC1D00FE1360 /* FirebaseFunctionsCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6883022DC1D00FE1360 /* FirebaseFunctionsCombine-Community */; };
+		DA0AA68B3022DC1D00FE1360 /* FirebaseInAppMessaging-Beta in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA68A3022DC1D00FE1360 /* FirebaseInAppMessaging-Beta */; };
+		DA0AA68D3022DC1D00FE1360 /* FirebaseInstallations in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA68C3022DC1D00FE1360 /* FirebaseInstallations */; };
+		DA0AA68F3022DC1D00FE1360 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA68E3022DC1D00FE1360 /* FirebaseMessaging */; };
+		DA0AA6913022DC1D00FE1360 /* FirebaseMLModelDownloader in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6903022DC1D00FE1360 /* FirebaseMLModelDownloader */; };
+		DA0AA6933022DC1D00FE1360 /* FirebasePerformance in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6923022DC1D00FE1360 /* FirebasePerformance */; };
+		DA0AA6953022DC1D00FE1360 /* FirebaseRemoteConfig in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6943022DC1D00FE1360 /* FirebaseRemoteConfig */; };
+		DA0AA6973022DC1D00FE1360 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6963022DC1D00FE1360 /* FirebaseStorage */; };
+		DA0AA6993022DC1D00FE1360 /* FirebaseStorageCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = DA0AA6983022DC1D00FE1360 /* FirebaseStorageCombine-Community */; };
 		E65DAC2AB8B5BCBC4B6AE5D8 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 7A2B5D6734DC15C9220014A6 /* GoogleSignIn */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		DA0AA6623022D73C00FE1360 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DA8958D12FE7730500D45512 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DA0AA6543022D73C00FE1360;
+			remoteInfo = WhoZupNotifications;
+		};
 		DA8958E92FE7730700D45512 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = DA8958D12FE7730500D45512 /* Project object */;
@@ -33,14 +67,38 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		DA0AA6693022D73C00FE1360 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				DA0AA6643022D73C00FE1360 /* WhoZupNotifications.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		BD0C2A70D0AFF9C22BEF2F73 /* GoogleService-Info.plist */ = {isa = PBXFileReference; explicitFileType = text.plist; name = "GoogleService-Info.plist"; path = "WhoZup/GoogleService-Info.plist"; sourceTree = "<group>"; };
+		DA0AA6553022D73C00FE1360 /* WhoZupNotifications.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WhoZupNotifications.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		DA0AA6573022D73C00FE1360 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
+		DA0AA6593022D73C00FE1360 /* UserNotificationsUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotificationsUI.framework; path = System/Library/Frameworks/UserNotificationsUI.framework; sourceTree = SDKROOT; };
 		DA8958D92FE7730500D45512 /* WhoZup.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WhoZup.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA8958E82FE7730700D45512 /* WhoZupTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WhoZupTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA8958F22FE7730700D45512 /* WhoZupUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WhoZupUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		DA0AA6683022D73C00FE1360 /* Exceptions for "WhoZupNotifications" folder in "WhoZupNotifications" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = DA0AA6543022D73C00FE1360 /* WhoZupNotifications */;
+		};
 		DA8959AA2FE7730900D45512 /* Exceptions for "WhoZup" folder in "WhoZup" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -52,6 +110,14 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		DA0AA65B3022D73C00FE1360 /* WhoZupNotifications */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				DA0AA6683022D73C00FE1360 /* Exceptions for "WhoZupNotifications" folder in "WhoZupNotifications" target */,
+			);
+			path = WhoZupNotifications;
+			sourceTree = "<group>";
+		};
 		DA8958DB2FE7730500D45512 /* WhoZup */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -73,6 +139,39 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		DA0AA6523022D73C00FE1360 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DA0AA6873022DC1D00FE1360 /* FirebaseFunctions in Frameworks */,
+				DA0AA6753022DC1D00FE1360 /* FirebaseAppCheck in Frameworks */,
+				DA0AA6793022DC1D00FE1360 /* FirebaseAuth in Frameworks */,
+				DA0AA6973022DC1D00FE1360 /* FirebaseStorage in Frameworks */,
+				DA0AA66D3022DC1D00FE1360 /* FirebaseAILogic in Frameworks */,
+				DA0AA6713022DC1D00FE1360 /* FirebaseAnalyticsCore in Frameworks */,
+				DA0AA65A3022D73C00FE1360 /* UserNotificationsUI.framework in Frameworks */,
+				DA0AA6733022DC1D00FE1360 /* FirebaseAnalyticsIdentitySupport in Frameworks */,
+				DA0AA6913022DC1D00FE1360 /* FirebaseMLModelDownloader in Frameworks */,
+				DA0AA67B3022DC1D00FE1360 /* FirebaseAuthCombine-Community in Frameworks */,
+				DA0AA6583022D73C00FE1360 /* UserNotifications.framework in Frameworks */,
+				DA0AA68F3022DC1D00FE1360 /* FirebaseMessaging in Frameworks */,
+				DA0AA6833022DC1D00FE1360 /* FirebaseFirestore in Frameworks */,
+				DA0AA6853022DC1D00FE1360 /* FirebaseFirestoreCombine-Community in Frameworks */,
+				DA0AA68B3022DC1D00FE1360 /* FirebaseInAppMessaging-Beta in Frameworks */,
+				DA0AA6893022DC1D00FE1360 /* FirebaseFunctionsCombine-Community in Frameworks */,
+				DA0AA6993022DC1D00FE1360 /* FirebaseStorageCombine-Community in Frameworks */,
+				DA0AA6953022DC1D00FE1360 /* FirebaseRemoteConfig in Frameworks */,
+				DA0AA66F3022DC1D00FE1360 /* FirebaseAnalytics in Frameworks */,
+				DA0AA67F3022DC1D00FE1360 /* FirebaseCrashlytics in Frameworks */,
+				DA0AA6933022DC1D00FE1360 /* FirebasePerformance in Frameworks */,
+				DA0AA66B3022DC1D00FE1360 /* FirebaseAI in Frameworks */,
+				DA0AA67D3022DC1D00FE1360 /* FirebaseCore in Frameworks */,
+				DA0AA6813022DC1D00FE1360 /* FirebaseDatabase in Frameworks */,
+				DA0AA6773022DC1D00FE1360 /* FirebaseAppDistribution-Beta in Frameworks */,
+				DA0AA68D3022DC1D00FE1360 /* FirebaseInstallations in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DA8958D62FE7730500D45512 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -103,12 +202,23 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		DA0AA6563022D73C00FE1360 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				DA0AA6573022D73C00FE1360 /* UserNotifications.framework */,
+				DA0AA6593022D73C00FE1360 /* UserNotificationsUI.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		DA8958D02FE7730500D45512 = {
 			isa = PBXGroup;
 			children = (
 				DA8958DB2FE7730500D45512 /* WhoZup */,
 				DA8958EB2FE7730700D45512 /* WhoZupTests */,
 				DA8958F52FE7730700D45512 /* WhoZupUITests */,
+				DA0AA65B3022D73C00FE1360 /* WhoZupNotifications */,
+				DA0AA6563022D73C00FE1360 /* Frameworks */,
 				DA8958DA2FE7730500D45512 /* Products */,
 				BD0C2A70D0AFF9C22BEF2F73 /* GoogleService-Info.plist */,
 			);
@@ -120,6 +230,7 @@
 				DA8958D92FE7730500D45512 /* WhoZup.app */,
 				DA8958E82FE7730700D45512 /* WhoZupTests.xctest */,
 				DA8958F22FE7730700D45512 /* WhoZupUITests.xctest */,
+				DA0AA6553022D73C00FE1360 /* WhoZupNotifications.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -127,6 +238,52 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		DA0AA6543022D73C00FE1360 /* WhoZupNotifications */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = DA0AA6653022D73C00FE1360 /* Build configuration list for PBXNativeTarget "WhoZupNotifications" */;
+			buildPhases = (
+				DA0AA6513022D73C00FE1360 /* Sources */,
+				DA0AA6523022D73C00FE1360 /* Frameworks */,
+				DA0AA6533022D73C00FE1360 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				DA0AA65B3022D73C00FE1360 /* WhoZupNotifications */,
+			);
+			name = WhoZupNotifications;
+			packageProductDependencies = (
+				DA0AA66A3022DC1D00FE1360 /* FirebaseAI */,
+				DA0AA66C3022DC1D00FE1360 /* FirebaseAILogic */,
+				DA0AA66E3022DC1D00FE1360 /* FirebaseAnalytics */,
+				DA0AA6703022DC1D00FE1360 /* FirebaseAnalyticsCore */,
+				DA0AA6723022DC1D00FE1360 /* FirebaseAnalyticsIdentitySupport */,
+				DA0AA6743022DC1D00FE1360 /* FirebaseAppCheck */,
+				DA0AA6763022DC1D00FE1360 /* FirebaseAppDistribution-Beta */,
+				DA0AA6783022DC1D00FE1360 /* FirebaseAuth */,
+				DA0AA67A3022DC1D00FE1360 /* FirebaseAuthCombine-Community */,
+				DA0AA67C3022DC1D00FE1360 /* FirebaseCore */,
+				DA0AA67E3022DC1D00FE1360 /* FirebaseCrashlytics */,
+				DA0AA6803022DC1D00FE1360 /* FirebaseDatabase */,
+				DA0AA6823022DC1D00FE1360 /* FirebaseFirestore */,
+				DA0AA6843022DC1D00FE1360 /* FirebaseFirestoreCombine-Community */,
+				DA0AA6863022DC1D00FE1360 /* FirebaseFunctions */,
+				DA0AA6883022DC1D00FE1360 /* FirebaseFunctionsCombine-Community */,
+				DA0AA68A3022DC1D00FE1360 /* FirebaseInAppMessaging-Beta */,
+				DA0AA68C3022DC1D00FE1360 /* FirebaseInstallations */,
+				DA0AA68E3022DC1D00FE1360 /* FirebaseMessaging */,
+				DA0AA6903022DC1D00FE1360 /* FirebaseMLModelDownloader */,
+				DA0AA6923022DC1D00FE1360 /* FirebasePerformance */,
+				DA0AA6943022DC1D00FE1360 /* FirebaseRemoteConfig */,
+				DA0AA6963022DC1D00FE1360 /* FirebaseStorage */,
+				DA0AA6983022DC1D00FE1360 /* FirebaseStorageCombine-Community */,
+			);
+			productName = WhoZupNotifications;
+			productReference = DA0AA6553022D73C00FE1360 /* WhoZupNotifications.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		DA8958D82FE7730500D45512 /* WhoZup */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = DA8958FC2FE7730700D45512 /* Build configuration list for PBXNativeTarget "WhoZup" */;
@@ -134,10 +291,12 @@
 				DA8958D52FE7730500D45512 /* Sources */,
 				DA8958D62FE7730500D45512 /* Frameworks */,
 				DA8958D72FE7730500D45512 /* Resources */,
+				DA0AA6693022D73C00FE1360 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				DA0AA6633022D73C00FE1360 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				DA8958DB2FE7730500D45512 /* WhoZup */,
@@ -211,6 +370,9 @@
 				LastSwiftUpdateCheck = 2640;
 				LastUpgradeCheck = 2640;
 				TargetAttributes = {
+					DA0AA6543022D73C00FE1360 = {
+						CreatedOnToolsVersion = 26.4;
+					};
 					DA8958D82FE7730500D45512 = {
 						CreatedOnToolsVersion = 26.4;
 					};
@@ -245,11 +407,19 @@
 				DA8958D82FE7730500D45512 /* WhoZup */,
 				DA8958E72FE7730700D45512 /* WhoZupTests */,
 				DA8958F12FE7730700D45512 /* WhoZupUITests */,
+				DA0AA6543022D73C00FE1360 /* WhoZupNotifications */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		DA0AA6533022D73C00FE1360 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DA8958D72FE7730500D45512 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -275,6 +445,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		DA0AA6513022D73C00FE1360 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DA8958D52FE7730500D45512 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -299,6 +476,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		DA0AA6633022D73C00FE1360 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DA0AA6543022D73C00FE1360 /* WhoZupNotifications */;
+			targetProxy = DA0AA6623022D73C00FE1360 /* PBXContainerItemProxy */;
+		};
 		DA8958EA2FE7730700D45512 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = DA8958D82FE7730500D45512 /* WhoZup */;
@@ -312,6 +494,64 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		DA0AA6663022D73C00FE1360 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = WhoZupNotifications/WhoZupNotifications.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7H4B5RGM9Y;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WhoZupNotifications/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WhoZupNotifications;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Akshay.WhoZup.WhoZupNotifications;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		DA0AA6673022D73C00FE1360 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = WhoZupNotifications/WhoZupNotifications.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7H4B5RGM9Y;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WhoZupNotifications/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WhoZupNotifications;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Akshay.WhoZup.WhoZupNotifications;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 		DA8958FA2FE7730700D45512 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -438,17 +678,20 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = WhoZup/WhoZup.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = F58J28V895;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = 7H4B5RGM9Y;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WhoZup/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WhoZUp;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -463,7 +706,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -472,17 +715,20 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = WhoZup/WhoZup.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = F58J28V895;
+				CURRENT_PROJECT_VERSION = 4;
+				DEVELOPMENT_TEAM = 7H4B5RGM9Y;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WhoZup/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = WhoZUp;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -497,7 +743,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -507,7 +753,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = F58J28V895;
+				DEVELOPMENT_TEAM = 7H4B5RGM9Y;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
 				MARKETING_VERSION = 1.0;
@@ -518,7 +764,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WhoZup.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WhoZup";
 			};
 			name = Debug;
@@ -529,7 +775,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = F58J28V895;
+				DEVELOPMENT_TEAM = 7H4B5RGM9Y;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
 				MARKETING_VERSION = 1.0;
@@ -540,7 +786,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/WhoZup.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/WhoZup";
 			};
 			name = Release;
@@ -550,7 +796,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = F58J28V895;
+				DEVELOPMENT_TEAM = 7H4B5RGM9Y;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = "-ObjC";
@@ -561,7 +807,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				TEST_TARGET_NAME = WhoZup;
 			};
 			name = Debug;
@@ -571,7 +817,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = F58J28V895;
+				DEVELOPMENT_TEAM = 7H4B5RGM9Y;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				OTHER_LDFLAGS = "-ObjC";
@@ -582,7 +828,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 				TEST_TARGET_NAME = WhoZup;
 			};
 			name = Release;
@@ -590,6 +836,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		DA0AA6653022D73C00FE1360 /* Build configuration list for PBXNativeTarget "WhoZupNotifications" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DA0AA6663022D73C00FE1360 /* Debug */,
+				DA0AA6673022D73C00FE1360 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		DA8958D42FE7730500D45512 /* Build configuration list for PBXProject "WhoZup" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -677,6 +932,126 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMessaging;
+		};
+		DA0AA66A3022DC1D00FE1360 /* FirebaseAI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAI;
+		};
+		DA0AA66C3022DC1D00FE1360 /* FirebaseAILogic */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAILogic;
+		};
+		DA0AA66E3022DC1D00FE1360 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		DA0AA6703022DC1D00FE1360 /* FirebaseAnalyticsCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsCore;
+		};
+		DA0AA6723022DC1D00FE1360 /* FirebaseAnalyticsIdentitySupport */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsIdentitySupport;
+		};
+		DA0AA6743022DC1D00FE1360 /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
+		};
+		DA0AA6763022DC1D00FE1360 /* FirebaseAppDistribution-Beta */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseAppDistribution-Beta";
+		};
+		DA0AA6783022DC1D00FE1360 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		DA0AA67A3022DC1D00FE1360 /* FirebaseAuthCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseAuthCombine-Community";
+		};
+		DA0AA67C3022DC1D00FE1360 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		DA0AA67E3022DC1D00FE1360 /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
+		};
+		DA0AA6803022DC1D00FE1360 /* FirebaseDatabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseDatabase;
+		};
+		DA0AA6823022DC1D00FE1360 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+		DA0AA6843022DC1D00FE1360 /* FirebaseFirestoreCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseFirestoreCombine-Community";
+		};
+		DA0AA6863022DC1D00FE1360 /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
+		};
+		DA0AA6883022DC1D00FE1360 /* FirebaseFunctionsCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseFunctionsCombine-Community";
+		};
+		DA0AA68A3022DC1D00FE1360 /* FirebaseInAppMessaging-Beta */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseInAppMessaging-Beta";
+		};
+		DA0AA68C3022DC1D00FE1360 /* FirebaseInstallations */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseInstallations;
+		};
+		DA0AA68E3022DC1D00FE1360 /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+		DA0AA6903022DC1D00FE1360 /* FirebaseMLModelDownloader */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMLModelDownloader;
+		};
+		DA0AA6923022DC1D00FE1360 /* FirebasePerformance */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebasePerformance;
+		};
+		DA0AA6943022DC1D00FE1360 /* FirebaseRemoteConfig */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseRemoteConfig;
+		};
+		DA0AA6963022DC1D00FE1360 /* FirebaseStorage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseStorage;
+		};
+		DA0AA6983022DC1D00FE1360 /* FirebaseStorageCombine-Community */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 410B2894E5368C95D4D73F73 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = "FirebaseStorageCombine-Community";
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

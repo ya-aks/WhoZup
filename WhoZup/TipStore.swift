@@ -128,6 +128,11 @@ final class TipStore {
     private(set) var purchaseStates: [String: TipPurchaseState] = [:]
     private(set) var isLoadingProducts = false
     private(set) var loadError: String?
+    /// True when live StoreKit products couldn't be fetched (offline, or the IAPs
+    /// aren't configured/approved yet). The UI shows an "unavailable" message
+    /// rather than fake, un-purchasable tiers — App Store review rejects IAP
+    /// buttons that look functional but aren't.
+    private(set) var productsUnavailable = false
 
     private let purchaser: TipPurchasing
 
@@ -148,21 +153,44 @@ final class TipStore {
         do {
             let fetched = try await purchaser.fetchProducts(for: Self.productIdentifiers)
             if fetched.isEmpty {
-                tiers = Self.defaultFallbackTiers
+                // Products aren't available (not configured/approved, or offline).
+                // Show nothing purchasable rather than fabricated tiers.
+                tiers = []
+                productsUnavailable = true
             } else {
                 tiers = fetched.sorted { $0.priceValue < $1.priceValue }
+                productsUnavailable = false
             }
         } catch {
             loadError = error.localizedDescription
-            tiers = Self.defaultFallbackTiers
+            tiers = []
+            productsUnavailable = true
         }
     }
 
-    static let defaultFallbackTiers: [TipTier] = [
-        TipTier(id: "com.whozup.tip.small", displayName: "Small Tip", displayPrice: "$1.99", priceValue: 1.99),
-        TipTier(id: "com.whozup.tip.medium", displayName: "Medium Tip", displayPrice: "$4.99", priceValue: 4.99),
-        TipTier(id: "com.whozup.tip.large", displayName: "Large Tip", displayPrice: "$9.99", priceValue: 9.99)
-    ]
+    /// True when the device's App Store region is India. Used only to pick the
+    /// fallback tip currency below — the live StoreKit path localizes prices on
+    /// its own from the buyer's storefront, so it needs no region check.
+    static var isIndiaRegion: Bool {
+        Locale.current.region?.identifier == "IN"
+    }
+
+    /// Shown when live products can't be fetched (offline, or IAPs not yet
+    /// configured). Rupee tiers in India, dollar tiers elsewhere.
+    static var defaultFallbackTiers: [TipTier] {
+        if isIndiaRegion {
+            return [
+                TipTier(id: "com.whozup.tip.small", displayName: "Small Tip", displayPrice: "₹29", priceValue: 29),
+                TipTier(id: "com.whozup.tip.medium", displayName: "Medium Tip", displayPrice: "₹99", priceValue: 99),
+                TipTier(id: "com.whozup.tip.large", displayName: "Large Tip", displayPrice: "₹149", priceValue: 149)
+            ]
+        }
+        return [
+            TipTier(id: "com.whozup.tip.small", displayName: "Small Tip", displayPrice: "$0.99", priceValue: 0.99),
+            TipTier(id: "com.whozup.tip.medium", displayName: "Medium Tip", displayPrice: "$3.99", priceValue: 3.99),
+            TipTier(id: "com.whozup.tip.large", displayName: "Large Tip", displayPrice: "$6.99", priceValue: 6.99)
+        ]
+    }
 
     /// Initiates a purchase for the given tier and updates `purchaseStates`.
     func purchase(_ tier: TipTier) async {

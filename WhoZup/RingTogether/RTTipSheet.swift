@@ -49,6 +49,21 @@ struct RTTipSheet: View {
                         .foregroundStyle(RT.inkMuted)
                 }
                 .padding(.top, 28)
+            } else if tipStore.tiers.isEmpty {
+                // Never show fake, un-purchasable tiers. While loading, show a
+                // spinner; if products truly can't load, say so plainly.
+                Group {
+                    if tipStore.isLoadingProducts {
+                        ProgressView()
+                    } else {
+                        Text("Tips are temporarily unavailable. Please try again later.")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(RT.inkMuted)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 28)
             } else {
                 HStack(spacing: 12) {
                     ForEach(tipStore.tiers) { tier in

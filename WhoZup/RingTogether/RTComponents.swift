@@ -141,3 +141,69 @@ struct RTGroupCard: View {
     }
 }
 
+
+/// Asks you what happened to an alarm that rang without a response reaching
+/// the app, and records the answer. Re-checks every minute so it appears the
+/// moment today's alarm time passes and disappears once answered.
+struct RTCheckInCard: View {
+    let groupId: String
+    let accent: Color
+    /// Space above the card, applied only when it shows.
+    var topSpacing: CGFloat = 0
+
+    @Environment(GroupRepository.self) private var repository
+    @State private var saving = false
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 60)) { context in
+            if let pending = repository.pendingCheckIn(groupId: groupId, now: context.date) {
+                card(pending).padding(.top, topSpacing)
+            }
+        }
+    }
+
+    private func card(_ pending: RTPendingCheckIn) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "alarm")
+                    .font(.system(size: 14, weight: .bold))
+                Text("Your \(RTAlarmTime.display(pending.time)) alarm")
+                    .font(.system(size: 15, weight: .bold))
+            }
+            .foregroundStyle(RT.ink)
+
+            Text("We didn't get your response. What happened?")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(RT.inkMuted)
+
+            HStack(spacing: 10) {
+                choice("I woke up", status: .wokeUp, filled: true)
+                choice("I snoozed", status: .snoozed, filled: false)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18).fill(RT.card))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(accent.opacity(0.45), lineWidth: 1.5))
+    }
+
+    private func choice(_ title: String, status: RTStatus, filled: Bool) -> some View {
+        Button {
+            guard !saving else { return }
+            saving = true
+            Task {
+                await repository.recordManualCheckIn(groupId: groupId, status: status)
+                saving = false
+            }
+        } label: {
+            Text(title)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(filled ? .white : accent)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(RoundedRectangle(cornerRadius: 12).fill(filled ? accent : accent.opacity(0.12)))
+        }
+        .buttonStyle(RTPressStyle())
+        .disabled(saving)
+    }
+}

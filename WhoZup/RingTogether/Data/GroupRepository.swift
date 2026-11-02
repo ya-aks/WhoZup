@@ -313,7 +313,12 @@ final class GroupRepository {
                 status: status,
                 detail: detail,
                 alarm: doc?.alarmTime,
-                pendingSync: isYou && (pendingStatuses[gid]?.contains(memberUid) ?? false)
+                pendingSync: isYou && (pendingStatuses[gid]?.contains(memberUid) ?? false),
+                habit: (isYou || doc?.habit?.showSteps == true) ? doc?.habit : nil,
+                hasHabit: type == .accountability && doc?.habit != nil,
+                // Only today's routine, and only while today's status stands.
+                routine: (isStatusFromToday && statusDoc?.routine?.day == Self.dayKey())
+                    ? statusDoc?.routine : nil
             )
         }
 
@@ -427,7 +432,8 @@ final class GroupRepository {
         eventPlace: String? = nil,
         eventAt: Date? = nil,
         eventEndAt: Date? = nil,
-        detailedDescription: String? = nil
+        detailedDescription: String? = nil,
+        habit: MemberHabit? = nil
     ) async -> String? {
         guard let uid = currentUid else { return nil }
         if type == .event && !canCreateEvent {
@@ -473,6 +479,12 @@ final class GroupRepository {
                 groupId: groupRef.documentID, uid: uid, role: "admin",
                 alarmTime: ownAlarm, alarmDays: ownDays
             )
+            // The creator's personal habit, if they built one (Check-ins only).
+            let ownHabit = type == .accountability ? habit : nil
+            if let ownHabit {
+                try await groupRef.collection("members").document(uid)
+                    .setData(["habit": ownHabit.firestoreData], merge: true)
+            }
             // Show our own alarm immediately; the members listener for a
             // just-created group can otherwise miss our doc until a restart.
             let initials = String(currentDisplayName.prefix(1)).uppercased()
@@ -483,7 +495,8 @@ final class GroupRepository {
                 avatarColorHex: RTAvatarPalette.hex(for: uid),
                 role: "admin",
                 alarmTime: ownAlarm,
-                alarmDays: ownDays.isEmpty ? nil : ownDays.sorted()
+                alarmDays: ownDays.isEmpty ? nil : ownDays.sorted(),
+                habit: ownHabit
             )
             rebuild()
             // The invite doubles as the invitee's only readable preview of the
@@ -596,6 +609,46 @@ final class GroupRepository {
     }
 
     // MARK: - Alarm edits
+
+    // MARK: - Habits
+
+    /// The signed-in member's habit in a group, if they built one.
+    func myHabit(groupId: String) -> MemberHabit? {
+        guard let uid = currentUid else { return nil }
+        return (members[groupId]?.first { $0.id == uid } ?? pendingOwnMember[groupId])?.habit
+    }
+
+    /// Every Check-ins group where the signed-in member has a habit, by group.
+    /// Persisted with the alarm records so a Stop in a cold background launch
+    /// knows which routine to open.
+    func myHabitsByGroup() -> [String: MemberHabit] {
+        var out: [String: MemberHabit] = [:]
+        for group in groups where group.type == .accountability {
+            if let habit = myHabit(groupId: group.id) { out[group.id] = habit }
+        }
+        return out
+    }
+
+    /// Sets the signed-in member's habit in a group, or removes it with `nil`.
+    /// Habits are personal: this never touches anyone else's.
+    @discardableResult
+    func setMyHabit(groupId: String, habit: MemberHabit?) async -> Bool {
+        guard let uid = currentUid else { return false }
+        let hadHabit = myHabit(groupId: groupId) != nil
+        do {
+            try await db.collection("groups").document(groupId)
+                .collection("members").document(uid)
+                .setData(["habit": habit?.firestoreData ?? FieldValue.delete()], merge: true)
+            if let habit, !hadHabit {
+                let what = habit.showSteps ? "started a habit: \(habit.name)" : "started building a habit"
+                await writeActivity(groupId: groupId, kind: "habit_started", message: "\(currentDisplayName) \(what)")
+            }
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
 
     /// Sets the current member's own alarm (accountability) and notes it in the
     /// activity feed so the whole group is informed.
@@ -1208,7 +1261,10 @@ final class GroupRepository {
 
     /// Each member's alarm outcome for one day (uid → status), for the
     /// dashboard's day view. One-shot read; absent members simply have no entry.
-    func fetchDayOutcomes(groupId: String, day: String) async -> [String: RTStatus] {
+    func fetchDayOutcomes(
+        groupId: String, day: String,
+        routine: ((_ uid: String, _ routine: RoutineProgress) -> Void)? = nil
+    ) async -> [String: RTStatus] {
         guard let g = rawGroups[groupId] else { return [:] }
         var result: [String: RTStatus] = [:]
         for uid in g.memberUids {
@@ -1217,9 +1273,13 @@ final class GroupRepository {
                 .collection("history").document(day).getDocument(),
                let s = snap.data()?["status"] as? String {
                 result[uid] = RTStatus(storageKey: s)
+                if let r = RoutineProgress(map: snap.data()?["routine"]) { routine?(uid, r) }
             }
         }
-        if day == Self.dayKey() { overlayLiveOutcomes(groupId: groupId) { uid, s in result[uid] = s } }
+        if day == Self.dayKey() {
+            overlayLiveOutcomes(groupId: groupId) { uid, s in result[uid] = s }
+            for member in group(id: groupId)?.roster ?? [] { if let r = member.routine { routine?(member.uid, r) } }
+        }
         return result
     }
 
@@ -1236,7 +1296,10 @@ final class GroupRepository {
 
     /// Each member's outcomes across a month (uid → [dayKey → status]), for the
     /// dashboard's month view. `monthPrefix` is "yyyy-MM".
-    func fetchMonthOutcomes(groupId: String, monthPrefix: String) async -> [String: [String: RTStatus]] {
+    func fetchMonthOutcomes(
+        groupId: String, monthPrefix: String,
+        routine: ((_ uid: String, _ day: String, _ routine: RoutineProgress) -> Void)? = nil
+    ) async -> [String: [String: RTStatus]] {
         guard let g = rawGroups[groupId] else { return [:] }
         let start = "\(monthPrefix)-01"
         let end = "\(monthPrefix)-31"
@@ -1251,6 +1314,7 @@ final class GroupRepository {
                 var days: [String: RTStatus] = [:]
                 for doc in snap.documents where doc.data()["status"] is String {
                     days[doc.documentID] = RTStatus(storageKey: doc.data()["status"] as! String)
+                    if let r = RoutineProgress(map: doc.data()["routine"]) { routine?(uid, doc.documentID, r) }
                 }
                 result[uid] = days
             }
@@ -1258,6 +1322,7 @@ final class GroupRepository {
         let today = Self.dayKey()
         if today.hasPrefix(monthPrefix) {
             overlayLiveOutcomes(groupId: groupId) { uid, s in result[uid, default: [:]][today] = s }
+            for member in group(id: groupId)?.roster ?? [] { if let r = member.routine { routine?(member.uid, today, r) } }
         }
         return result
     }

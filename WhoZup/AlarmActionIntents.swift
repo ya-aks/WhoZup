@@ -47,6 +47,11 @@ struct AlarmRecord: Codable {
     /// the device, a stale alarm must not write *their* status into the
     /// previous account's groups.
     var uid: String?
+    /// The owner's habits in the groups behind this alarm, by group id, and
+    /// those groups' names — what an on-time Stop needs to open the routine
+    /// from a cold background launch.
+    var habits: [String: MemberHabit]?
+    var groupNames: [String: String]?
 }
 
 /// UserDefaults-backed store mapping an AlarmKit alarm id to the groups it
@@ -69,9 +74,12 @@ struct AlarmActionStore {
         scheduledTime: Date,
         time: String? = nil,
         days: [Int]? = nil,
-        uid: String? = nil
+        uid: String? = nil,
+        habits: [String: MemberHabit]? = nil,
+        groupNames: [String: String]? = nil
     ) {
-        let record = AlarmRecord(groupIds: groupIds, scheduledTime: scheduledTime, time: time, days: days, uid: uid)
+        let record = AlarmRecord(groupIds: groupIds, scheduledTime: scheduledTime, time: time, days: days,
+                                 uid: uid, habits: habits, groupNames: groupNames)
         guard let data = try? JSONEncoder().encode(record) else { return }
         defaults.set(data, forKey: key(alarmID))
     }
@@ -253,13 +261,6 @@ enum AlarmActionHandler {
             return .ignored
         }
 
-        let kindKey = kind == .dismiss ? "dismiss" : "snooze"
-        if let last = AlarmActionStore.shared.lastHandled(alarmID: alarmID),
-           last.kind == kindKey, abs(now.timeIntervalSince(last.at)) < duplicateWindow {
-            return .ignored
-        }
-        AlarmActionStore.shared.markHandled(alarmID: alarmID, kind: kindKey, at: now)
-
         // Derive against the occurrence this response is actually answering. For
         // a repeating alarm the stored `scheduledTime` is stale after the first
         // firing (AlarmKit re-fires weekly with no reschedule), so recompute the
@@ -270,6 +271,16 @@ enum AlarmActionHandler {
             return MissedAlarm.mostRecentFire(time: time, days: record.days ?? [], now: now)
                 ?? record.scheduledTime
         }()
+
+        let kindKey = kind == .dismiss ? "dismiss" : "snooze"
+        let last = AlarmActionStore.shared.lastHandled(alarmID: alarmID)
+        if let last, last.kind == kindKey, abs(now.timeIntervalSince(last.at)) < duplicateWindow {
+            return .ignored
+        }
+        // A snooze already answered this ring: the routine only opens on a
+        // first-ring Stop, because the habit is built at the alarm or not at all.
+        let snoozedThisRing = last.map { $0.kind == "snooze" && $0.at >= scheduledTime.addingTimeInterval(-60) } ?? false
+        AlarmActionStore.shared.markHandled(alarmID: alarmID, kind: kindKey, at: now)
         let derived = StatusDerivation.status(
             scheduledTime: scheduledTime,
             actions: [MemberAction(kind: kind, timestamp: now)],
@@ -304,6 +315,17 @@ enum AlarmActionHandler {
         // cancelled alarm's record is removed by `RTAlarmSync.cancel`.)
         if kind == .dismiss, record.time == nil {
             AlarmActionStore.shared.remove(alarmID: alarmID)
+        }
+
+        // Stopped on time, first ring: open today's habit routine.
+        if kind == .dismiss, status == .wokeUp, !snoozedThisRing,
+           let groupId = record.groupIds.first(where: { record.habits?[$0] != nil }),
+           let habit = record.habits?[groupId] {
+            await RoutineCoordinator.shared.begin(
+                groupId: groupId,
+                groupName: record.groupNames?[groupId] ?? "Check-ins",
+                habit: habit, uid: uid, alarmFiredAt: scheduledTime, now: now
+            )
         }
         return .written
     }
@@ -433,6 +455,30 @@ enum AlarmActionHandler {
 struct StopAlarmIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Stop Alarm"
     static var isDiscoverable: Bool = false
+
+    @Parameter(title: "Alarm ID")
+    var alarmID: String
+
+    init() {}
+    init(alarmID: UUID) { self.alarmID = alarmID.uuidString }
+
+    func perform() async throws -> some IntentResult {
+        let tappedAt = Date()
+        guard let id = UUID(uuidString: alarmID) else { return .result() }
+        try? AlarmManager.shared.stop(id: id)
+        await AlarmActionHandler.capture(alarmID: id, kind: .dismiss, at: tappedAt)
+        return .result()
+    }
+}
+
+/// The Stop used instead of `StopAlarmIntent` when the alarm has a habit routine
+/// but Live Activities are off for WhoZup: `openAppWhenRun` brings the app
+/// forward (after Face ID on a locked phone) so the routine screen can open —
+/// the same flag Apple's WWDC25 AlarmKit sample uses for its "open app" button.
+struct StopAlarmOpenIntent: LiveActivityIntent {
+    static var title: LocalizedStringResource = "Stop Alarm and Open Routine"
+    static var isDiscoverable: Bool = false
+    static var openAppWhenRun: Bool = true
 
     @Parameter(title: "Alarm ID")
     var alarmID: String

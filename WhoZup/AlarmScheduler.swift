@@ -17,6 +17,7 @@
 //
 
 import AlarmKit
+import AppIntents
 import Foundation
 import SwiftUI
 
@@ -98,12 +99,13 @@ public final class AlarmScheduler {
     /// Schedules an alarm to fire at `date`, with a system Stop button and a
     /// Snooze button that starts a `snoozeInterval` countdown before
     /// re-alerting.
-    public func scheduleAlarm(id: UUID, date: Date, label: String = "Alarm") async throws {
+    public func scheduleAlarm(id: UUID, date: Date, label: String = "Alarm", stopOpensApp: Bool = false) async throws {
         let configuration = Self.makeConfiguration(
             id: id,
             date: date,
             label: label,
-            snoozeInterval: snoozeInterval
+            snoozeInterval: snoozeInterval,
+            stopOpensApp: stopOpensApp
         )
         try await manager.scheduleAlarm(id: id, configuration: configuration)
     }
@@ -111,13 +113,14 @@ public final class AlarmScheduler {
     /// Schedules a *repeating* alarm at `time` ("HH:mm") on the given weekdays
     /// (`1=Sunday … 7=Saturday`; empty means every day), using AlarmKit's native
     /// weekly recurrence so it keeps ringing without the app being reopened.
-    public func scheduleAlarm(id: UUID, time: String, days: [Int], label: String = "Alarm") async throws {
+    public func scheduleAlarm(id: UUID, time: String, days: [Int], label: String = "Alarm", stopOpensApp: Bool = false) async throws {
         let configuration = Self.makeConfiguration(
             id: id,
             time: time,
             days: days,
             label: label,
-            snoozeInterval: snoozeInterval
+            snoozeInterval: snoozeInterval,
+            stopOpensApp: stopOpensApp
         )
         try await manager.scheduleAlarm(id: id, configuration: configuration)
     }
@@ -187,7 +190,8 @@ public final class AlarmScheduler {
         id: UUID,
         date: Date,
         label: String,
-        snoozeInterval: TimeInterval
+        snoozeInterval: TimeInterval,
+        stopOpensApp: Bool = false
     ) -> AlarmManager.AlarmConfiguration<WhoZupAlarmMetadata> {
         let attributes = AlarmAttributes<WhoZupAlarmMetadata>(
             presentation: makePresentation(label: label),
@@ -198,7 +202,7 @@ public final class AlarmScheduler {
             countdownDuration: makeCountdownDuration(snoozeInterval: snoozeInterval),
             schedule: .fixed(date),
             attributes: attributes,
-            stopIntent: StopAlarmIntent(alarmID: id),
+            stopIntent: stopIntent(id: id, opensApp: stopOpensApp),
             secondaryIntent: SnoozeAlarmIntent(alarmID: id)
         )
     }
@@ -210,7 +214,8 @@ public final class AlarmScheduler {
         time: String,
         days: [Int],
         label: String,
-        snoozeInterval: TimeInterval
+        snoozeInterval: TimeInterval,
+        stopOpensApp: Bool = false
     ) -> AlarmManager.AlarmConfiguration<WhoZupAlarmMetadata> {
         let parts = time.split(separator: ":")
         let hour = Int(parts.first ?? "6") ?? 6
@@ -232,9 +237,15 @@ public final class AlarmScheduler {
             countdownDuration: makeCountdownDuration(snoozeInterval: snoozeInterval),
             schedule: schedule,
             attributes: attributes,
-            stopIntent: StopAlarmIntent(alarmID: id),
+            stopIntent: stopIntent(id: id, opensApp: stopOpensApp),
             secondaryIntent: SnoozeAlarmIntent(alarmID: id)
         )
+    }
+
+    /// The Stop button's intent. Normally a background one; when the alarm has a
+    /// habit routine and Live Activities are off, one that opens the app.
+    static func stopIntent(id: UUID, opensApp: Bool) -> any LiveActivityIntent {
+        opensApp ? StopAlarmOpenIntent(alarmID: id) : StopAlarmIntent(alarmID: id)
     }
 
     /// Maps `1=Sunday … 7=Saturday` to AlarmKit's `Locale.Weekday`.

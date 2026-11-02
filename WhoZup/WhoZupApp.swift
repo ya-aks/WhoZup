@@ -101,6 +101,11 @@ struct WhoZupApp: App {
                 // used when a silent push can't verify — e.g. on the simulator)
                 // must be handed to Auth first or phone sign-in never completes.
                 if Auth.auth().canHandle(url) { return }
+                // "Open routine" on the lock-screen Live Activity.
+                if RoutineLink.matches(url) {
+                    RoutineCoordinator.shared.presentRoutine = true
+                    return
+                }
                 if GIDSignIn.sharedInstance.handle(url) { return }
                 if let code = InviteLink.code(from: url) {
                     pendingInvite.set(code)

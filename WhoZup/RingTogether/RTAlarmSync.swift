@@ -10,6 +10,7 @@
 //  everyone" work — each device reconciles from live Firestore data.
 //
 
+import ActivityKit
 import CryptoKit
 import Foundation
 
@@ -89,6 +90,9 @@ final class RTAlarmSync {
     /// "HH:mm" -> the weekday set the alarm for that time was last scheduled
     /// with, so a change to which days ring re-triggers a reschedule.
     private var scheduledDays: [String: [Int]] = [:]
+    /// "HH:mm" -> whether that alarm's Stop opens the app (habit routine with
+    /// Live Activities off), so flipping it reschedules the alarm.
+    private var scheduledOpensApp: [String: Bool] = [:]
     private var authorized: Bool?
 
     init(scheduler: AlarmScheduler, recorder: AlarmStatusRecorder, repository: GroupRepository) {
@@ -106,7 +110,13 @@ final class RTAlarmSync {
     static func signature(for groups: [RTGroup], timeZone: TimeZone = .current) -> String {
         let alarms = groups
             .filter { ($0.type == .accountability || $0.type == .shared) && !$0.alarm.isEmpty }
-            .map { "\($0.id):\($0.alarm):\($0.alarmDays.map(String.init).joined(separator: "-")):\($0.alarmOnce ? "1" : "0")" }
+            .map { group -> String in
+                // Your habit too: a new or edited habit must reach the alarm record.
+                let habit = group.roster.first { $0.isYou }?.habit.map {
+                    "\($0.name)/\($0.steps.map(\.title).joined(separator: ","))/\($0.windowMinutes)"
+                } ?? ""
+                return "\(group.id):\(group.alarm):\(group.alarmDays.map(String.init).joined(separator: "-")):\(group.alarmOnce ? "1" : "0"):\(habit)"
+            }
             .sorted()
             .joined(separator: "|")
         return "\(timeZone.identifier)#\(alarms)"
@@ -198,6 +208,12 @@ final class RTAlarmSync {
         live = live.filter { desired[$0.key] != nil }
         scheduledLabels = scheduledLabels.filter { desired[$0.key] != nil }
         scheduledDays = scheduledDays.filter { desired[$0.key] != nil }
+        scheduledOpensApp = scheduledOpensApp.filter { desired[$0.key] != nil }
+
+        // Habits ride along with the alarm records so a Stop in a cold
+        // background launch can open the routine.
+        let habits = repository.myHabitsByGroup()
+        let liveActivitiesOn = ActivityAuthorizationInfo().areActivitiesEnabled
 
         guard !desired.isEmpty else { await AlarmCheckInNotifier.refresh(); return }
         guard await ensureAuthorized() else { return }
@@ -220,15 +236,21 @@ final class RTAlarmSync {
             // recurrence so a later firing derives against the right occurrence
             // rather than this (soon-stale) fireDate, and every record is stamped
             // with the owning account so a later sign-in can't inherit it.
+            let slotHabits = habits.filter { groupIds.contains($0.key) }
             AlarmActionStore.shared.save(
                 alarmID: id, groupIds: groupIds, scheduledTime: fireDate,
                 time: once ? nil : time, days: once ? nil : days,
-                uid: repository.signedInUid
+                uid: repository.signedInUid,
+                habits: slotHabits.isEmpty ? nil : slotHabits,
+                groupNames: Dictionary(uniqueKeysWithValues: groupIds.map { ($0, repository.group(id: $0)?.name ?? "") })
             )
+            // With a habit but no Live Activities, Stop has to open the app.
+            let opensApp = !slotHabits.isEmpty && !liveActivitiesOn
 
             // Already on the system with the same label and days — leave it
             // alone rather than churning a live alarm.
-            if live[key] != nil, scheduledLabels[key] == label, scheduledDays[key] ?? [] == days {
+            if live[key] != nil, scheduledLabels[key] == label, scheduledDays[key] ?? [] == days,
+               scheduledOpensApp[key] ?? false == opensApp {
                 continue
             }
 
@@ -236,13 +258,14 @@ final class RTAlarmSync {
                 // Scheduling with the same id replaces the existing alarm.
                 if once {
                     // A single alarm: one fixed fire at the next occurrence.
-                    try await scheduler.scheduleAlarm(id: id, date: fireDate, label: label)
+                    try await scheduler.scheduleAlarm(id: id, date: fireDate, label: label, stopOpensApp: opensApp)
                 } else {
                     // Repeating: AlarmKit weekly recurrence on the selected days.
-                    try await scheduler.scheduleAlarm(id: id, time: time, days: days, label: label)
+                    try await scheduler.scheduleAlarm(id: id, time: time, days: days, label: label, stopOpensApp: opensApp)
                 }
                 scheduledLabels[key] = label
                 scheduledDays[key] = days
+                scheduledOpensApp[key] = opensApp
             } catch {
                 // Leave it; a later reconcile retries. The registrations above
                 // are harmless if no alarm ends up existing.
@@ -278,7 +301,10 @@ final class RTAlarmSync {
         let scheduler = AlarmScheduler()
         AlarmActionStore.shared.removeAll()
         AlarmResponseJournal.removeAll()
-        Task { await AlarmCheckInNotifier.removeAll() }
+        Task {
+            await AlarmCheckInNotifier.removeAll()
+            await RoutineCoordinator.shared.reset()
+        }
         for slot in (try? scheduler.existingSlots()) ?? [] where alarmID(forTime: slot.key) == slot.id {
             try? scheduler.cancelAlarm(id: slot.id)
         }

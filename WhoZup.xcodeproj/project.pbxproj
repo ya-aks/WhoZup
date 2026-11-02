@@ -8,8 +8,10 @@
 
 /* Begin PBXBuildFile section */
 		07C18AA9AAC1B55DE444CBD1 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = C598ED96D05040C9492CFF05 /* FirebaseFirestore */; };
+		4619E7C0A9825EC71474ED5A /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 34EA81EFC2A8C8CF95BAC01B /* Foundation.framework */; };
 		4EEC73872E4563B663E330A5 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 912235DA9D7EC8B531685916 /* FirebaseAuth */; };
 		59671EF866236BED62AF1801 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = BD0C2A70D0AFF9C22BEF2F73 /* GoogleService-Info.plist */; };
+		6A407078DBD2D484646B644D /* WhoZupWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 9CB08830344F55F51F00C6AB /* WhoZupWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		74B0A55AD5C82A3F7200A433 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6322061D09FC0FC9616FB02E /* FirebaseCore */; };
 		B2ED6E088A5C45F45DCF828A /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = D167938F612C7E618957CEA4 /* FirebaseMessaging */; };
 		B3BA0503FC564014803F3725 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 569D7B47EF43B9FBC8DDF68F /* GoogleSignInSwift */; };
@@ -44,6 +46,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		292495B3189AD784736836D9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = DA8958D12FE7730500D45512 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 01A7094F84638DB17F0CD520;
+			remoteInfo = WhoZupWidgets;
+		};
 		DA0AA6623022D73C00FE1360 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = DA8958D12FE7730500D45512 /* Project object */;
@@ -75,6 +84,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				DA0AA6643022D73C00FE1360 /* WhoZupNotifications.appex in Embed Foundation Extensions */,
+				6A407078DBD2D484646B644D /* WhoZupWidgets.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -82,6 +92,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		34EA81EFC2A8C8CF95BAC01B /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		9CB08830344F55F51F00C6AB /* WhoZupWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WhoZupWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		BD0C2A70D0AFF9C22BEF2F73 /* GoogleService-Info.plist */ = {isa = PBXFileReference; explicitFileType = text.plist; name = "GoogleService-Info.plist"; path = "WhoZup/GoogleService-Info.plist"; sourceTree = "<group>"; };
 		DA0AA6553022D73C00FE1360 /* WhoZupNotifications.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WhoZupNotifications.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		DA0AA6573022D73C00FE1360 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
@@ -110,6 +122,13 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		270341703B4102B9EAE09151 /* WhoZupShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = WhoZupShared;
+			sourceTree = "<group>";
+		};
 		DA0AA65B3022D73C00FE1360 /* WhoZupNotifications */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -128,17 +147,36 @@
 		};
 		DA8958EB2FE7730700D45512 /* WhoZupTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = WhoZupTests;
 			sourceTree = "<group>";
 		};
 		DA8958F52FE7730700D45512 /* WhoZupUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = WhoZupUITests;
+			sourceTree = "<group>";
+		};
+		E3E6447AE1629A3DC5421959 /* WhoZupWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = WhoZupWidgets;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		62FBB323C6B4B37787CC0BCC /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4619E7C0A9825EC71474ED5A /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DA0AA6523022D73C00FE1360 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -202,11 +240,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		B2C1B6A6B10AB174DAD1D56E /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				34EA81EFC2A8C8CF95BAC01B /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 		DA0AA6563022D73C00FE1360 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
 				DA0AA6573022D73C00FE1360 /* UserNotifications.framework */,
 				DA0AA6593022D73C00FE1360 /* UserNotificationsUI.framework */,
+				B2C1B6A6B10AB174DAD1D56E /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -221,6 +268,8 @@
 				DA0AA6563022D73C00FE1360 /* Frameworks */,
 				DA8958DA2FE7730500D45512 /* Products */,
 				BD0C2A70D0AFF9C22BEF2F73 /* GoogleService-Info.plist */,
+				270341703B4102B9EAE09151 /* WhoZupShared */,
+				E3E6447AE1629A3DC5421959 /* WhoZupWidgets */,
 			);
 			sourceTree = "<group>";
 		};
@@ -231,6 +280,7 @@
 				DA8958E82FE7730700D45512 /* WhoZupTests.xctest */,
 				DA8958F22FE7730700D45512 /* WhoZupUITests.xctest */,
 				DA0AA6553022D73C00FE1360 /* WhoZupNotifications.appex */,
+				9CB08830344F55F51F00C6AB /* WhoZupWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -238,6 +288,27 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		01A7094F84638DB17F0CD520 /* WhoZupWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BA5BFC91C8F28ED04D685730 /* Build configuration list for PBXNativeTarget "WhoZupWidgets" */;
+			buildPhases = (
+				5CC85ABCF6BD4F4DF3505401 /* Sources */,
+				62FBB323C6B4B37787CC0BCC /* Frameworks */,
+				29792BB8453AAE2F764D6804 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				E3E6447AE1629A3DC5421959 /* WhoZupWidgets */,
+				270341703B4102B9EAE09151 /* WhoZupShared */,
+			);
+			name = WhoZupWidgets;
+			productName = WhoZupWidgets;
+			productReference = 9CB08830344F55F51F00C6AB /* WhoZupWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		DA0AA6543022D73C00FE1360 /* WhoZupNotifications */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = DA0AA6653022D73C00FE1360 /* Build configuration list for PBXNativeTarget "WhoZupNotifications" */;
@@ -297,9 +368,11 @@
 			);
 			dependencies = (
 				DA0AA6633022D73C00FE1360 /* PBXTargetDependency */,
+				D2A3EC4BA0CE8C92E040C054 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				DA8958DB2FE7730500D45512 /* WhoZup */,
+				270341703B4102B9EAE09151 /* WhoZupShared */,
 			);
 			name = WhoZup;
 			packageProductDependencies = (
@@ -331,8 +404,6 @@
 				DA8958EB2FE7730700D45512 /* WhoZupTests */,
 			);
 			name = WhoZupTests;
-			packageProductDependencies = (
-			);
 			productName = WhoZupTests;
 			productReference = DA8958E82FE7730700D45512 /* WhoZupTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -354,8 +425,6 @@
 				DA8958F52FE7730700D45512 /* WhoZupUITests */,
 			);
 			name = WhoZupUITests;
-			packageProductDependencies = (
-			);
 			productName = WhoZupUITests;
 			productReference = DA8958F22FE7730700D45512 /* WhoZupUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -408,11 +477,19 @@
 				DA8958E72FE7730700D45512 /* WhoZupTests */,
 				DA8958F12FE7730700D45512 /* WhoZupUITests */,
 				DA0AA6543022D73C00FE1360 /* WhoZupNotifications */,
+				01A7094F84638DB17F0CD520 /* WhoZupWidgets */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		29792BB8453AAE2F764D6804 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DA0AA6533022D73C00FE1360 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -445,6 +522,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		5CC85ABCF6BD4F4DF3505401 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		DA0AA6513022D73C00FE1360 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -476,6 +560,12 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		D2A3EC4BA0CE8C92E040C054 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = WhoZupWidgets;
+			target = 01A7094F84638DB17F0CD520 /* WhoZupWidgets */;
+			targetProxy = 292495B3189AD784736836D9 /* PBXContainerItemProxy */;
+		};
 		DA0AA6633022D73C00FE1360 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = DA0AA6543022D73C00FE1360 /* WhoZupNotifications */;
@@ -494,6 +584,37 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		29E66ACD58C3166CED7B87B0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7H4B5RGM9Y;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "WhoZupWidgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = WhoZup;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Akshay.WhoZup.WhoZupWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) WIDGET_EXTENSION";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
 		DA0AA6663022D73C00FE1360 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -833,9 +954,50 @@
 			};
 			name = Release;
 		};
+		EA79D528F8DF6DCC79C09174 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = "";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7H4B5RGM9Y;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "WhoZupWidgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = WhoZup;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = Akshay.WhoZup.WhoZupWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) WIDGET_EXTENSION";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		BA5BFC91C8F28ED04D685730 /* Build configuration list for PBXNativeTarget "WhoZupWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				EA79D528F8DF6DCC79C09174 /* Release */,
+				29E66ACD58C3166CED7B87B0 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		DA0AA6653022D73C00FE1360 /* Build configuration list for PBXNativeTarget "WhoZupNotifications" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

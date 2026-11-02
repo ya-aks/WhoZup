@@ -33,6 +33,9 @@ struct RTCreateGroupSheet: View {
     @State private var eventEndAt = Calendar.current.date(byAdding: .hour, value: 5, to: Date()) ?? Date()
     @State private var isWorking = false
     @State private var createdCode: String?
+    /// Check-ins only: build a personal habit with your alarm.
+    @State private var buildHabit = false
+    @State private var habitDraft = RTHabitDraft()
     @State private var showAddMembers = false
 
     var body: some View {
@@ -82,6 +85,9 @@ struct RTCreateGroupSheet: View {
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(RT.inkMuted)
                             .padding(.top, 8)
+                    }
+                    if type == .accountability {
+                        habitCard.padding(.top, 26)
                     }
                     // Only shared groups have a common time to interpret; an
                     // accountability alarm is always the member's own local one.
@@ -192,6 +198,40 @@ struct RTCreateGroupSheet: View {
 
     // MARK: - Pieces
 
+    /// "Build a habit with my alarm" — optional and personal.
+    private var habitCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Toggle(isOn: $buildHabit.animation()) {
+                HStack(spacing: 12) {
+                    Image(systemName: "checklist")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(RoundedRectangle(cornerRadius: 11).fill(RT.dotOnTime))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Build a habit with my alarm")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(RT.ink)
+                        Text("Just for you · others in the group choose for themselves")
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(Color(hex: "#4a6b5e"))
+                    }
+                }
+            }
+            .tint(RT.dotOnTime)
+            .padding(16)
+            .background(Color(hex: "#e3f3ec"))
+
+            if buildHabit {
+                RTHabitFields(draft: $habitDraft)
+                    .padding(16)
+            }
+        }
+        .background(RoundedRectangle(cornerRadius: 18).fill(RT.card))
+        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(hex: "#b9dccd"), lineWidth: 1.5))
+    }
+
     private func fieldLabel(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 14, weight: .bold))
@@ -248,6 +288,7 @@ struct RTCreateGroupSheet: View {
         if type == .event {
             return !eventTitle.trimmingCharacters(in: .whitespaces).isEmpty && eventAt > Date()
         }
+        if type == .accountability && buildHabit && habitDraft.habit == nil { return false }
         return true
     }
 
@@ -265,7 +306,8 @@ struct RTCreateGroupSheet: View {
                 alarmAnchor: alarmAnchor,
                 alarmDays: repeats ? (selectedDays.count == RTWeekday.all.count ? [] : Array(selectedDays)) : [],
                 alarmOnce: type == .shared && !repeats,
-                detailedDescription: trimmedDesc
+                detailedDescription: trimmedDesc,
+                habit: (type == .accountability && buildHabit) ? habitDraft.habit : nil
             )
         case .event:
             code = await repository.createGroup(

@@ -86,6 +86,8 @@ struct GroupMemberDoc: Codable, Identifiable {
     /// missed-alarm check so a just-set alarm isn't retroactively "late" for an
     /// occurrence that already passed today. Absent on older docs.
     var alarmSetAt: Timestamp? = nil
+    /// This member's personal habit in this group, if they built one.
+    var habit: MemberHabit? = nil
 }
 
 /// An append-only activity-feed entry (`groups/{id}/activity/{id}`).
@@ -112,6 +114,8 @@ struct MemberStatusDoc: Codable, Identifiable {
     /// is the server's time, which for an answer made offline is when it
     /// *synced* — possibly hours later, or the next day.
     var respondedAt: Timestamp?
+    /// Today's habit routine progress, merged in after an on-time stop.
+    var routine: RoutineProgress? = nil
 
     /// The best known time of this status: the phone's answer time, falling
     /// back to the server time for docs written before `respondedAt` existed.

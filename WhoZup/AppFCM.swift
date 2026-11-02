@@ -168,6 +168,11 @@ final class AppFCM: NSObject, MessagingDelegate, UNUserNotificationCenterDelegat
     ) async {
         // The alarm "Did you wake up?" check-in has its own answers.
         if await AlarmCheckInNotifier.handle(response: response) { return }
+        // "Start your routine" (no Live Activity could be shown): open it.
+        if response.notification.request.content.userInfo["kind"] as? String == "routine" {
+            RoutineCoordinator.shared.presentRoutine = true
+            return
+        }
 
         let actionIdentifier = response.actionIdentifier
         let userInfo = response.notification.request.content.userInfo

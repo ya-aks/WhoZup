@@ -131,6 +131,12 @@ struct RTMember: Identifiable {
     /// synced to the server (offline write, still in Firestore's pending queue).
     /// Only ever set for your own row — pending writes are inherently local.
     var pendingSync: Bool = false
+    /// The member's habit. For other members this is nil when they keep it
+    /// private (`showSteps == false`); `hasHabit` still says one exists.
+    var habit: MemberHabit? = nil
+    var hasHabit: Bool = false
+    /// Today's routine, present only once it has started (an on-time stop).
+    var routine: RoutineProgress? = nil
 
     var displayName: String { isYou ? "You" : name }
     var displayAvatarColor: Color { isYou ? RT.ink : avatarColor }

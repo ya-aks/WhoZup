@@ -10,6 +10,8 @@
 //  manual "set alarm" step.
 //
 
+import FirebaseCore
+import FirebaseFirestore
 import SwiftUI
 
 struct RTGroupDetailView: View {
@@ -19,6 +21,7 @@ struct RTGroupDetailView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showEditAlarm = false
+    @State private var showHabitSheet = false
     @State private var showShareInvite = false
     @State private var showManageMembers = false
     @State private var showDashboard = false
@@ -58,6 +61,9 @@ struct RTGroupDetailView: View {
         .toolbarBackground(RT.canvas, for: .navigationBar)
         .sheet(isPresented: $showEditAlarm) {
             if let group { RTEditAlarmSheet(group: group) }
+        }
+        .sheet(isPresented: $showHabitSheet) {
+            RTHabitSheet(groupId: groupId)
         }
         .sheet(isPresented: $showShareInvite) {
             if let group, let code = repository.inviteCode(for: groupId) {
@@ -129,6 +135,20 @@ struct RTGroupDetailView: View {
                 }
 
                 heroCard(group).padding(.top, 14)
+
+                // Habits are personal and Check-ins only.
+                if group.type == .accountability, let me = group.roster.first(where: { $0.isYou }) {
+                    if let habit = me.habit {
+                        RTTodayRoutineCard(groupId: group.id, habit: habit, routine: me.routine, alarm: group.alarm)
+                            .padding(.top, 12)
+                    } else {
+                        RTAddHabitCard(
+                            othersWithHabit: group.roster.filter { !$0.isYou && $0.hasHabit }.count,
+                            memberCount: group.roster.count
+                        ) { showHabitSheet = true }
+                        .padding(.top, 12)
+                    }
+                }
 
                 RTCheckInCard(groupId: group.id, accent: group.type.accent, topSpacing: 12)
 
@@ -206,6 +226,30 @@ struct RTGroupDetailView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.85))
                     .padding(.top, 6)
+            }
+
+            if group.type == .accountability, let habit = group.roster.first(where: { $0.isYou })?.habit {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("THEN YOUR HABIT · \(habit.name.uppercased())")
+                        .font(.system(size: 12, weight: .bold))
+                        .tracking(0.5)
+                        .foregroundStyle(.white.opacity(0.75))
+                    Text(habit.steps.map(\.title).joined(separator: " · "))
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                    HStack {
+                        Text("Finish within \(habit.windowMinutes == 60 ? "1 hour" : "\(habit.windowMinutes) min")")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.8))
+                        Spacer()
+                        Button("Edit habit") { showHabitSheet = true }
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                }
+                .padding(.top, 14)
+                .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.22)).frame(height: 1) }
+                .padding(.top, 14)
             }
 
             if canEdit {
@@ -453,6 +497,7 @@ struct RTMemberRow: View {
                 Text(member.detail)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(RT.inkMuted)
+                if member.hasHabit { habitLines }
                 if member.pendingSync {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.triangle.2.circlepath")
@@ -467,5 +512,32 @@ struct RTMemberRow: View {
             RTStatusChip(status: member.status)
         }
         .padding(.vertical, 12)
+    }
+
+    /// The routine bar (only after an on-time stop) above the habit name.
+    @ViewBuilder private var habitLines: some View {
+        let skipped = member.status == .snoozed || member.status == .silentLate || member.status == .runningLate
+        if let routine = member.routine, member.status == .wokeUp {
+            HStack(spacing: 8) {
+                RTRoutineBar(done: routine.done, tiny: routine.tiny)
+                    .frame(width: 96)
+                Text(routineLabel(routine))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(routine.isComplete ? RT.dotOnTime : RT.inkSecondary)
+            }
+            .padding(.top, 4)
+        }
+        let name = member.habit?.name ?? "Building a habit"
+        Text(skipped ? "\(name) · no routine today" : name)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(skipped ? RT.inkMuted : RT.dotOnTime)
+    }
+
+    private func routineLabel(_ routine: RoutineProgress) -> String {
+        if routine.tiny { return "Tiny version" }
+        if routine.isComplete, let at = routine.completedAt?.dateValue() {
+            return "Done \(RTAlarmTime.display(RTAlarmTime.string(from: at)))"
+        }
+        return routine.summary
     }
 }

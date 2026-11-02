@@ -21,6 +21,9 @@ struct RTDashboardView: View {
     // groupId -> uid -> status (day view); groupId -> uid -> dayKey -> status (month).
     @State private var dayData: [String: [String: RTStatus]] = [:]
     @State private var monthData: [String: [String: [String: RTStatus]]] = [:]
+    /// Habit routines by group → member (→ day for the month view).
+    @State private var dayRoutines: [String: [String: RoutineProgress]] = [:]
+    @State private var monthRoutines: [String: [String: [String: RoutineProgress]]] = [:]
     @State private var loading = false
     @State private var selectedType: RTGroupType = .accountability
 
@@ -196,11 +199,22 @@ struct RTDashboardView: View {
 
     private func dayRow(group: RTGroup, member: RTMember) -> some View {
         let status = dayData[group.id]?[member.uid]
+        // The routine only exists on a day the alarm was stopped on time.
+        let routine = status == .wokeUp ? dayRoutines[group.id]?[member.uid] : nil
         return HStack(spacing: 10) {
             RTAvatar(initials: member.initials, color: member.displayAvatarColor, size: 26)
-            Text(member.displayName)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(RT.ink)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(member.displayName)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(RT.ink)
+                if let routine {
+                    RTRoutineBar(done: routine.done, tiny: routine.tiny)
+                        .frame(width: 120)
+                    Text("Routine \(routine.isComplete && !routine.tiny ? "done" : routine.summary.lowercased())")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(routine.isComplete ? RT.dotOnTime : RT.inkSecondary)
+                }
+            }
             Spacer()
             if let status {
                 RTStatusChip(status: status)
@@ -222,12 +236,15 @@ struct RTDashboardView: View {
         let isCurrentMonth = Calendar.current.isDate(refDate, equalTo: Date(), toGranularity: .month)
         let today = isCurrentMonth ? Calendar.current.component(.day, from: Date()) : monthLength
         let outcomes = monthData[group.id]?[member.uid] ?? [:]
+        let routines = monthRoutines[group.id]?[member.uid] ?? [:]
 
         // Every day of the month, in order (1 → last), with its recorded outcome.
         // Days past today (current month) are marked future so the timeline shows
         // the whole month while the stats and streak only count elapsed days.
-        let dayStatuses: [(day: Int, status: RTStatus?, isFuture: Bool)] = (1...monthLength).map { d in
-            (d, outcomes[dayKeyFor(day: d, in: refDate)], d > today)
+        let dayStatuses: [(day: Int, status: RTStatus?, isFuture: Bool, routine: RoutineProgress?)] = (1...monthLength).map { d in
+            let key = dayKeyFor(day: d, in: refDate)
+            let status = outcomes[key]
+            return (d, status, d > today, status == .wokeUp ? routines[key] : nil)
         }
 
         var wokeCount = 0
@@ -246,6 +263,11 @@ struct RTDashboardView: View {
         }
 
         let onTimeRate = recordedDays > 0 ? Int(round(Double(wokeCount) / Double(recordedDays) * 100)) : 0
+        // Members with a habit are measured by their routine, not just waking.
+        let routineEntries = dayStatuses.compactMap { $0.isFuture ? nil : $0.routine }
+        let routineDays = routineEntries.count
+        let routineDone = routineEntries.filter(\.isComplete).count
+        let routineRate = recordedDays > 0 ? Int(round(Double(routineDone) / Double(recordedDays) * 100)) : 0
         let streak = currentStreak(dayStatuses.map { ($0.day, $0.status) })
 
         return VStack(alignment: .leading, spacing: 8) {
@@ -256,7 +278,7 @@ struct RTDashboardView: View {
                     Text(member.displayName)
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(RT.ink)
-                    Text("\(onTimeRate)% on-time")
+                    Text(routineDays > 0 ? "\(routineRate)% routine done" : "\(onTimeRate)% on-time")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(onTimeRate >= 80 ? RTStatus.wokeUp.chipColor : (onTimeRate >= 50 ? RTStatus.snoozed.chipColor : RT.inkMuted))
                 }
@@ -265,9 +287,12 @@ struct RTDashboardView: View {
             }
 
             RTMonthTimeline(days: dayStatuses, today: today, isCurrentMonth: isCurrentMonth)
+                .accessibilityLabel(routineDays > 0 ? "\(routineDone) of \(recordedDays) routines done" : "")
 
             // Stat counters
-            Text("\(wokeCount) woke · \(snoozeCount) snoozed · \(lateCount) late")
+            Text(routineDays > 0
+                 ? "\(routineDone) routines done · \(snoozeCount) snoozed · \(lateCount) late"
+                 : "\(wokeCount) woke · \(snoozeCount) snoozed · \(lateCount) late")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(RT.inkMuted)
         }
@@ -328,17 +353,27 @@ struct RTDashboardView: View {
         if mode == .day {
             let day = Self.dayKey(refDate)
             var out: [String: [String: RTStatus]] = [:]
+            var routines: [String: [String: RoutineProgress]] = [:]
             for group in groupsToShow {
-                out[group.id] = await repository.fetchDayOutcomes(groupId: group.id, day: day)
+                var r: [String: RoutineProgress] = [:]
+                out[group.id] = await repository.fetchDayOutcomes(groupId: group.id, day: day) { uid, p in r[uid] = p }
+                routines[group.id] = r
             }
             dayData = out
+            dayRoutines = routines
         } else {
             let month = Self.monthKey(refDate)
             var out: [String: [String: [String: RTStatus]]] = [:]
+            var routines: [String: [String: [String: RoutineProgress]]] = [:]
             for group in groupsToShow {
-                out[group.id] = await repository.fetchMonthOutcomes(groupId: group.id, monthPrefix: month)
+                var r: [String: [String: RoutineProgress]] = [:]
+                out[group.id] = await repository.fetchMonthOutcomes(groupId: group.id, monthPrefix: month) { uid, day, p in
+                    r[uid, default: [:]][day] = p
+                }
+                routines[group.id] = r
             }
             monthData = out
+            monthRoutines = routines
         }
     }
 
@@ -363,7 +398,7 @@ struct RTDashboardView: View {
 /// and render a live scroll indicator beneath the strip — signalling that the
 /// row scrolls and where in the month you currently are.
 private struct RTMonthTimeline: View {
-    let days: [(day: Int, status: RTStatus?, isFuture: Bool)]
+    let days: [(day: Int, status: RTStatus?, isFuture: Bool, routine: RoutineProgress?)]
     let today: Int
     let isCurrentMonth: Bool
 
@@ -397,13 +432,12 @@ private struct RTMonthTimeline: View {
         .overlay(alignment: .trailing) { edgeArrow(pointsLeft: false) }
     }
 
-    private func cell(_ entry: (day: Int, status: RTStatus?, isFuture: Bool)) -> some View {
+    private func cell(_ entry: (day: Int, status: RTStatus?, isFuture: Bool, routine: RoutineProgress?)) -> some View {
         let isToday = isCurrentMonth && entry.day == today
         // A number for day 1, every 5th day, and today — enough to orient.
         let showLabel = entry.day == 1 || entry.day % 5 == 0 || isToday
         return VStack(spacing: 4) {
-            RoundedRectangle(cornerRadius: 3)
-                .fill(fill(entry))
+            cellBar(entry)
                 .frame(width: cellWidth, height: 22)
                 .overlay(
                     RoundedRectangle(cornerRadius: 3)
@@ -417,7 +451,25 @@ private struct RTMonthTimeline: View {
         .id(entry.day)
     }
 
-    private func fill(_ entry: (day: Int, status: RTStatus?, isFuture: Bool)) -> Color {
+    /// A day you woke up with a habit is split into its routine steps; any
+    /// other day is one solid block, as before.
+    @ViewBuilder private func cellBar(_ entry: (day: Int, status: RTStatus?, isFuture: Bool, routine: RoutineProgress?)) -> some View {
+        if let routine = entry.routine, !routine.tiny, routine.total > 1 {
+            VStack(spacing: 1) {
+                ForEach(routine.done.indices, id: \.self) { i in
+                    Rectangle().fill(routine.done[i] ? RT.dotOnTime : Color(hex: "#e1d9c8"))
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+        } else if let routine = entry.routine {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(routine.tiny ? Color(hex: "#8fc4ae") : (routine.isComplete ? RT.dotOnTime : Color(hex: "#e1d9c8")))
+        } else {
+            RoundedRectangle(cornerRadius: 3).fill(fill(entry))
+        }
+    }
+
+    private func fill(_ entry: (day: Int, status: RTStatus?, isFuture: Bool, routine: RoutineProgress?)) -> Color {
         if let status = entry.status { return status.reportColor }
         return RT.cardBorder.opacity(entry.isFuture ? 0.25 : 0.55)
     }

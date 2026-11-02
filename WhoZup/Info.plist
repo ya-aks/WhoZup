@@ -33,6 +33,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>WhoZup schedules alarms on this device so your group can see when your alarm rings.</string>
 	<key>UIBackgroundModes</key>

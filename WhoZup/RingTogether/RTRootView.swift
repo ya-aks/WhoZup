@@ -56,6 +56,14 @@ struct RTRootView: View {
         .sheet(isPresented: $showTipSheet) {
             RTTipSheet()
         }
+        // The habit routine: opened by the lock-screen card, the "Start your
+        // routine" notification, or a Stop that opens the app.
+        .fullScreenCover(isPresented: Binding(
+            get: { RoutineCoordinator.shared.presentRoutine },
+            set: { RoutineCoordinator.shared.presentRoutine = $0 }
+        )) {
+            RTRoutineView()
+        }
         // An invite link tapped while signed out parks its code in the store;
         // this view only exists once signed in, so presenting from here is what
         // resumes the flow after authentication.

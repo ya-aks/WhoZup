@@ -2,6 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.whozup.reconcileMissed</string>
+		<string>com.whozup.syncPending</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -33,8 +38,6 @@
 			</array>
 		</dict>
 	</array>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>WhoZup schedules alarms on this device so your group can see when your alarm rings.</string>
 	<key>UIBackgroundModes</key>
@@ -42,11 +45,6 @@
 		<string>fetch</string>
 		<string>processing</string>
 		<string>remote-notification</string>
-	</array>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>com.whozup.reconcileMissed</string>
-		<string>com.whozup.syncPending</string>
 	</array>
 </dict>
 </plist>

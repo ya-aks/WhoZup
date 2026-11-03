@@ -29,7 +29,7 @@ struct RTHabitDraft: Equatable {
         name = habit.name
         steps = habit.steps.map { Step(title: $0.title, tiny: $0.tiny ?? "") }
         if steps.isEmpty { steps = [Step()] }
-        windowMinutes = habit.windowMinutes
+        windowMinutes = min(max(habit.windowMinutes, MemberHabit.windowRange.lowerBound), MemberHabit.windowRange.upperBound)
         showSteps = habit.showSteps
     }
 
@@ -91,11 +91,18 @@ struct RTHabitFields: View {
             VStack(alignment: .leading, spacing: 8) {
                 label("Finish within")
                 Picker("Finish within", selection: $draft.windowMinutes) {
-                    ForEach(MemberHabit.windowOptions, id: \.self) { minutes in
-                        Text(minutes == 60 ? "1 hour" : "\(minutes) min").tag(minutes)
+                    ForEach(MemberHabit.windowRange, id: \.self) { minutes in
+                        Text("\(minutes) min").tag(minutes)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.wheel)
+                .frame(height: 120)
+                .clipped()
+                .background(RoundedRectangle(cornerRadius: 16).fill(RT.card))
+                .overlay(RoundedRectangle(cornerRadius: 16).stroke(RT.cardBorder, lineWidth: 1))
+                Text("Your routine stays open for \(draft.windowMinutes) min after the alarm stops.")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(RT.inkMuted)
             }
 
             Toggle(isOn: $draft.showSteps) {

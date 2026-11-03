@@ -25,6 +25,19 @@ private enum Palette {
     static let track = Color.white.opacity(0.22)
 }
 
+/// The WhoZup app icon, clipped to an app-icon-style rounded square.
+private struct AppIconBadge: View {
+    var size: CGFloat
+
+    var body: some View {
+        Image("WhoZupIcon")
+            .resizable()
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+    }
+}
+
 struct RoutineLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RoutineActivityAttributes.self) { context in
@@ -35,20 +48,28 @@ struct RoutineLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label(context.attributes.habitName, systemImage: "alarm")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        AppIconBadge(size: 20)
+                        Text(context.attributes.habitName)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    .padding(.top, 8)
+                    .padding(.leading, 6)
+                    .dynamicIsland(verticalPlacement: .belowIfTooWide)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     Text("\(context.state.doneCount)/\(context.attributes.steps.count)")
                         .font(.caption.weight(.bold))
+                        .padding(.top, 8)
+                        .padding(.trailing, 6)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     StepRow(attributes: context.attributes, state: context.state)
                 }
             } compactLeading: {
-                Image(systemName: context.state.isComplete ? "checkmark.circle.fill" : "alarm")
-                    .foregroundStyle(Palette.green)
+                AppIconBadge(size: 20)
             } compactTrailing: {
                 Text("\(context.state.doneCount)/\(context.attributes.steps.count)")
                     .font(.caption2.weight(.bold))
@@ -68,11 +89,7 @@ private struct RoutineLockScreenView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Image(systemName: "alarm")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.white)
-                    .frame(width: 22, height: 22)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color(red: 0.25, green: 0.44, blue: 0.64)))
+                AppIconBadge(size: 22)
                 Text("\(attributes.habitName) · \(attributes.groupName)")
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.white.opacity(0.7))
@@ -84,6 +101,7 @@ private struct RoutineLockScreenView: View {
                         .foregroundStyle(Palette.amber)
                 }
             }
+            .padding(.top, 4)
 
             StepRow(attributes: attributes, state: state)
 
@@ -103,7 +121,9 @@ private struct RoutineLockScreenView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.top, 20)
+        .padding(.bottom, 16)
         .foregroundStyle(.white)
     }
 }

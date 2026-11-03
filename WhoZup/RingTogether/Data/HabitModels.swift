@@ -30,7 +30,8 @@ struct HabitStep: Codable, Hashable {
 struct MemberHabit: Codable, Hashable {
     /// Most a routine may hold: small and specific beats ambitious.
     static let maxSteps = 3
-    static let windowOptions = [15, 30, 60]
+    /// The routine stays open between 1 and 59 minutes after the alarm stops.
+    static let windowRange = 1...59
 
     var name: String
     var steps: [HabitStep]

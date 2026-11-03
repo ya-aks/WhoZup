@@ -246,12 +246,14 @@ enum AlarmActionHandler {
 
         guard let record = AlarmActionStore.shared.record(for: alarmID) else {
             logger.error("No persisted record for alarm \(alarmIDString, privacy: .public)")
+            RoutineLog.add("\(kind == .dismiss ? "Stop" : "Snooze"): no alarm record (locked=\(locked))")
             return locked ? .retryLater : .ignored
         }
         // FirebaseAuth restores the signed-in user synchronously from disk, so
         // this works before any listener/observer has started.
         guard let uid = Auth.auth().currentUser?.uid else {
             logger.error("No signed-in user; cannot record alarm status")
+            RoutineLog.add("Stop: no signed-in user (locked=\(locked))")
             return locked ? .retryLater : .ignored
         }
         // Only ever write for the account that scheduled this alarm. Records
@@ -295,18 +297,6 @@ enum AlarmActionHandler {
             enqueueWrite(db: db, groupId: groupId, uid: uid, status: status, detail: detail, at: now)
         }
 
-        // The setData calls above hand the mutations to Firestore's on-disk
-        // queue immediately, so the response is durable even offline or if this
-        // background launch is torn down. Wait — but only briefly — for them to
-        // sync: online this confirms the write before we return; offline it just
-        // times out, and Firestore replays the queued mutations on the next
-        // launch with connectivity. Never block the intent on the network.
-        if !(await confirmPendingWrites(db: db, timeout: .seconds(5))) {
-            // Offline (or slow): have iOS send it once the device is online,
-            // in case the app isn't opened again before then.
-            PendingWritesSyncTask.schedule()
-        }
-
         // A dismiss ends a *one-time* alarm's lifecycle, so drop its record. A
         // repeating alarm keeps its record: AlarmKit re-fires it on the next
         // scheduled day without the app running, and that response needs the
@@ -317,16 +307,28 @@ enum AlarmActionHandler {
             AlarmActionStore.shared.remove(alarmID: alarmID)
         }
 
-        // Stopped on time, first ring: open today's habit routine.
+        // Stopped on time, first ring: open today's habit routine — straight
+        // away, before anything touches the network. The tap is the response;
+        // syncing it is the app's job, never the user's wait.
         if kind == .dismiss, status == .wokeUp, !snoozedThisRing,
            let groupId = record.groupIds.first(where: { record.habits?[$0] != nil }),
            let habit = record.habits?[groupId] {
+            RoutineLog.add("Stop on time, first ring → open routine for \(groupId)")
             await RoutineCoordinator.shared.begin(
                 groupId: groupId,
                 groupName: record.groupNames?[groupId] ?? "Check-ins",
                 habit: habit, uid: uid, alarmFiredAt: scheduledTime, now: now
             )
+        } else if kind == .dismiss {
+            RoutineLog.add("Stop without routine: status=\(status.storageKey) snoozedThisRing=\(snoozedThisRing) habits=\(record.habits?.count ?? 0)")
         }
+
+        // The setData calls above already put the writes in Firestore's on-disk
+        // queue, so the response is durable now, offline or not. Sync in the
+        // background: ask iOS to send it once online, and nudge it along while
+        // this launch is alive — without making anything wait for the server.
+        PendingWritesSyncTask.schedule()
+        Task { await confirmPendingWrites(db: db, timeout: .seconds(5)) }
         return .written
     }
 
@@ -383,9 +385,9 @@ enum AlarmActionHandler {
             ]) { _ in }
         }
         AlarmActionStore.shared.markHandled(alarmID: alarmID, kind: "checkin", at: now)
-        if !(await confirmPendingWrites(db: db, timeout: .seconds(5))) {
-            PendingWritesSyncTask.schedule()
-        }
+        // Durable in the on-disk queue already; sync without waiting on it.
+        PendingWritesSyncTask.schedule()
+        Task { await confirmPendingWrites(db: db, timeout: .seconds(5)) }
     }
 
     /// Queues the status doc plus (for real wake-up outcomes) the per-day
@@ -465,6 +467,7 @@ struct StopAlarmIntent: LiveActivityIntent {
     func perform() async throws -> some IntentResult {
         let tappedAt = Date()
         guard let id = UUID(uuidString: alarmID) else { return .result() }
+        await RoutineLog.add("Stop intent ran (background)")
         try? AlarmManager.shared.stop(id: id)
         await AlarmActionHandler.capture(alarmID: id, kind: .dismiss, at: tappedAt)
         return .result()
@@ -489,6 +492,7 @@ struct StopAlarmOpenIntent: LiveActivityIntent {
     func perform() async throws -> some IntentResult {
         let tappedAt = Date()
         guard let id = UUID(uuidString: alarmID) else { return .result() }
+        await RoutineLog.add("Stop intent ran (opens app)")
         try? AlarmManager.shared.stop(id: id)
         await AlarmActionHandler.capture(alarmID: id, kind: .dismiss, at: tappedAt)
         return .result()

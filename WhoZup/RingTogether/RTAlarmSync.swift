@@ -244,8 +244,12 @@ final class RTAlarmSync {
                 habits: slotHabits.isEmpty ? nil : slotHabits,
                 groupNames: Dictionary(uniqueKeysWithValues: groupIds.map { ($0, repository.group(id: $0)?.name ?? "") })
             )
-            // With a habit but no Live Activities, Stop has to open the app.
-            let opensApp = !slotHabits.isEmpty && !liveActivitiesOn
+            // With a habit, Stop opens the app (openAppWhenRun). iOS refuses to
+            // start a Live Activity from Stop's background run — tested: it came
+            // up as the fallback notification — but allows it once the app is in
+            // the foreground, so that's where the lock-screen card is started.
+            let opensApp = !slotHabits.isEmpty
+            _ = liveActivitiesOn
 
             // Already on the system with the same label and days — leave it
             // alone rather than churning a live alarm.

@@ -115,6 +115,8 @@ struct RTRootView: View {
         // app sat in the background, so re-check for skipped alarms then too.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
+                // Opened with a routine still open: put its card on the lock screen.
+                RoutineCoordinator.shared.ensureLiveActivity()
                 Task {
                     await AlarmReliability.sweep()
                     await repository.reconcileMissedAlarms()

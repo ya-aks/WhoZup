@@ -124,8 +124,6 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		270341703B4102B9EAE09151 /* WhoZupShared */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = WhoZupShared;
 			sourceTree = "<group>";
 		};
@@ -147,22 +145,16 @@
 		};
 		DA8958EB2FE7730700D45512 /* WhoZupTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = WhoZupTests;
 			sourceTree = "<group>";
 		};
 		DA8958F52FE7730700D45512 /* WhoZupUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = WhoZupUITests;
 			sourceTree = "<group>";
 		};
 		E3E6447AE1629A3DC5421959 /* WhoZupWidgets */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = WhoZupWidgets;
 			sourceTree = "<group>";
 		};
@@ -301,8 +293,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				E3E6447AE1629A3DC5421959 /* WhoZupWidgets */,
 				270341703B4102B9EAE09151 /* WhoZupShared */,
+				E3E6447AE1629A3DC5421959 /* WhoZupWidgets */,
 			);
 			name = WhoZupWidgets;
 			productName = WhoZupWidgets;
@@ -371,8 +363,8 @@
 				D2A3EC4BA0CE8C92E040C054 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				DA8958DB2FE7730500D45512 /* WhoZup */,
 				270341703B4102B9EAE09151 /* WhoZupShared */,
+				DA8958DB2FE7730500D45512 /* WhoZup */,
 			);
 			name = WhoZup;
 			packageProductDependencies = (
@@ -596,7 +588,7 @@
 				INFOPLIST_FILE = "WhoZupWidgets-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = WhoZup;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -808,11 +800,13 @@
 				INFOPLIST_FILE = WhoZup/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WhoZUp;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -845,11 +839,13 @@
 				INFOPLIST_FILE = WhoZup/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = WhoZUp;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = UIInterfaceOrientationPortrait;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = UIInterfaceOrientationPortrait;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -966,7 +962,7 @@
 				INFOPLIST_FILE = "WhoZupWidgets-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = WhoZup;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 26.4;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

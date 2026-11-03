@@ -115,6 +115,8 @@ struct RTGroupCard: View {
                 .foregroundStyle(RT.inkSecondary)
                 .padding(.top, 6)
 
+            RTRoutinePendingPill(group: group)
+
             RTAvatarStrip(members: group.avatarMembers)
                 .padding(.leading, 4)
                 .padding(.top, 12)
@@ -141,6 +143,41 @@ struct RTGroupCard: View {
     }
 }
 
+
+/// "Routine pending · 2 of 3" on a group's list card while your routine there
+/// is still open, so there's always a visible reminder that something's left.
+struct RTRoutinePendingPill: View {
+    let group: RTGroup
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            if group.type == .accountability, let pending = pending(now: context.date) {
+                HStack(spacing: 6) {
+                    Image(systemName: "checklist")
+                        .font(.system(size: 11, weight: .bold))
+                    Text("Routine pending · \(pending.done) of \(pending.total)")
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .foregroundStyle(RTStatus.snoozed.chipColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(RTStatus.snoozed.chipBackground))
+                .padding(.top, 10)
+                .accessibilityAddTraits(.isButton)
+            }
+        }
+    }
+
+    private func pending(now: Date) -> (done: Int, total: Int)? {
+        if let s = RoutineCoordinator.shared.session, s.groupId == group.id, s.isOpen(now: now) {
+            return (s.doneCount, s.done.count)
+        }
+        if let r = group.roster.first(where: { $0.isYou })?.routine, r.isOpen(now: now) {
+            return (r.doneCount, r.total)
+        }
+        return nil
+    }
+}
 
 /// Asks you what happened to an alarm that rang without a response reaching
 /// the app, and records the answer. Re-checks every minute so it appears the

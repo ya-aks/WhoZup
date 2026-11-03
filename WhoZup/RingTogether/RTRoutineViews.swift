@@ -158,6 +158,8 @@ struct RTRoutineView: View {
             content(now: context.date)
         }
         .background(RT.canvas.ignoresSafeArea())
+        // "Close · keep going later" must leave something to come back to.
+        .onDisappear { Task { await coordinator.routineLeftOpen() } }
     }
 
     @ViewBuilder private func content(now: Date) -> some View {
@@ -272,3 +274,34 @@ struct RTRoutineView: View {
         .disabled(s.tiny || (now > s.deadline && !s.isComplete))
     }
 }
+
+#if DEBUG
+/// What the routine did on this phone, for diagnosing a card that doesn't show.
+struct RTRoutineLogView: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = RoutineLog.read()
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text(text.isEmpty ? "Nothing logged yet. Stop an alarm that has a habit, then come back." : text)
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .textSelection(.enabled)
+            }
+            .navigationTitle("Routine log")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .primaryAction) {
+                    ShareLink(item: text) { Image(systemName: "square.and.arrow.up") }
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    Button("Clear", role: .destructive) { RoutineLog.clear(); text = "" }
+                }
+            }
+        }
+    }
+}
+#endif

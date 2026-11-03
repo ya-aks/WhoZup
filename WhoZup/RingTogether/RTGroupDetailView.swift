@@ -238,7 +238,7 @@ struct RTGroupDetailView: View {
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                     HStack {
-                        Text("Finish within \(habit.windowMinutes == 60 ? "1 hour" : "\(habit.windowMinutes) min")")
+                        Text("Finish within \(habit.windowMinutes) min")
                             .font(.system(size: 13, weight: .medium))
                             .foregroundStyle(.white.opacity(0.8))
                         Spacer()

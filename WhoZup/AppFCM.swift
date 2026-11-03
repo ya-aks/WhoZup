@@ -170,6 +170,7 @@ final class AppFCM: NSObject, MessagingDelegate, UNUserNotificationCenterDelegat
         if await AlarmCheckInNotifier.handle(response: response) { return }
         // "Start your routine" (no Live Activity could be shown): open it.
         if response.notification.request.content.userInfo["kind"] as? String == "routine" {
+            RoutineCoordinator.shared.ensureLiveActivity()
             RoutineCoordinator.shared.presentRoutine = true
             return
         }
@@ -304,6 +305,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         MissedAlarmBackgroundTask.schedule()
         // Anything still unsent goes out the next time the device is online.
         PendingWritesSyncTask.schedule()
+        // A routine left unfinished keeps a way back in: its lock-screen card,
+        // or a "Finish your routine" notification.
+        Task { await RoutineCoordinator.shared.routineLeftOpen() }
     }
 
     func application(

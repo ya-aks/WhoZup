@@ -25,6 +25,7 @@ struct RTProfileView: View {
     @State private var showSignOutConfirm = false
     @State private var isSigningOut = false
     @State private var deleteError: String?
+    @State private var showRoutineLog = false
 
     /// Result of a restore attempt, surfaced as an alert.
     private enum RestoreAlert: Identifiable {
@@ -319,6 +320,14 @@ struct RTProfileView: View {
             .buttonStyle(.plain)
             .disabled(eventPackStore.isRestoring)
             Divider().overlay(RT.divider)
+            #if DEBUG
+            Button { showRoutineLog = true } label: {
+                settingRowContent("Routine log", trailing: "Debug ›")
+            }
+            .buttonStyle(.plain)
+            .sheet(isPresented: $showRoutineLog) { RTRoutineLogView() }
+            Divider().overlay(RT.divider)
+            #endif
             Button {
                 if !isSigningOut && !isDeleting { showSignOutConfirm = true }
             } label: {

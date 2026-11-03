@@ -16,13 +16,16 @@ import SwiftUI
 struct RTRoutineBar: View {
     let done: [Bool]
     var tiny: Bool = false
+    /// Steps done with their tiny version, shown lighter.
+    var tinySteps: [Bool]? = nil
     var height: CGFloat = 6
 
     var body: some View {
         HStack(spacing: 3) {
             ForEach(done.indices, id: \.self) { i in
                 Capsule()
-                    .fill(tiny ? Color(hex: "#8fc4ae") : (done[i] ? RT.dotOnTime : Color(hex: "#e1d9c8")))
+                    .fill(tiny || (done[i] && tinySteps?.indices.contains(i) == true && tinySteps![i])
+                          ? Color(hex: "#8fc4ae") : (done[i] ? RT.dotOnTime : Color(hex: "#e1d9c8")))
                     .frame(height: height)
             }
         }
@@ -52,6 +55,7 @@ struct RTTodayRoutineCard: View {
         let session = coordinator.session.flatMap { $0.groupId == groupId && $0.day == GroupRepository.dayKey(now) ? $0 : nil }
         let done = session?.done ?? routine?.done
         let tiny = session?.tiny ?? routine?.tiny ?? false
+        let tinySteps = session?.tinySteps ?? routine?.tinySteps
         let deadline = session?.deadline ?? routine?.deadline?.dateValue()
         let complete = session?.isComplete ?? routine?.isComplete ?? false
         let open = !complete && (deadline.map { now <= $0 } ?? false)
@@ -59,7 +63,7 @@ struct RTTodayRoutineCard: View {
         VStack(alignment: .leading, spacing: 10) {
             if let done {
                 HStack(spacing: 10) {
-                    RTRoutineBar(done: done, tiny: tiny, height: 8)
+                    RTRoutineBar(done: done, tiny: tiny, tinySteps: tinySteps, height: 8)
                     Text(tiny ? "Tiny" : "\(done.filter { $0 }.count)/\(done.count)")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(RT.inkSecondary)
@@ -181,7 +185,7 @@ struct RTRoutineView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    RTRoutineBar(done: s.done, tiny: s.tiny, height: 10)
+                    RTRoutineBar(done: s.done, tiny: s.tiny, tinySteps: s.tinySteps, height: 10)
                     HStack {
                         Text(s.tiny ? "Tiny version" : "\(s.doneCount) of \(s.done.count) done")
                         Spacer()
@@ -203,19 +207,6 @@ struct RTRoutineView: View {
 
                 Spacer()
 
-                if !s.isComplete, s.habit.hasTinyVersion, now <= s.deadline {
-                    Button {
-                        Task { await coordinator.useTinyVersion() }
-                    } label: {
-                        Text("Do the tiny version instead")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundStyle(RT.ink)
-                            .frame(maxWidth: .infinity, minHeight: 54)
-                            .background(RoundedRectangle(cornerRadius: 16).fill(RT.card))
-                            .overlay(RoundedRectangle(cornerRadius: 16).stroke(RT.dotIdle, lineWidth: 1))
-                    }
-                    .buttonStyle(RTPressStyle())
-                }
                 Button { dismiss() } label: {
                     Text(s.isComplete ? "Done" : "Close · keep going later")
                         .font(.system(size: 16, weight: .bold))
@@ -244,34 +235,77 @@ struct RTRoutineView: View {
         }
     }
 
+    /// One step. Steps go in order and stay done: only the next step can be
+    /// marked; done steps are locked as done; later steps wait their turn.
+    /// A step with a tiny version offers both: the full step, or the tiny one.
+    @ViewBuilder
     private func stepButton(_ step: HabitStep, index: Int, session s: RoutineSession, now: Date) -> some View {
         let done = s.tiny || s.done[index]
-        return Button {
-            Task { await coordinator.setStep(index, done: !s.done[index]) }
-        } label: {
+        let didTiny = s.tiny || (done && (s.tinySteps?.indices.contains(index) == true && s.tinySteps![index]))
+        let isNext = !done && index == s.nextIndex && s.isOpen(now: now)
+        let waiting = !done && !isNext
+        let tinyText = (step.tiny ?? "").isEmpty ? nil : step.tiny
+
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 14) {
-                Image(systemName: done ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 26))
-                    .foregroundStyle(done ? RT.dotOnTime : RT.inkFaint)
+                Image(systemName: done ? "checkmark.square.fill" : (waiting ? "lock.fill" : "square"))
+                    .font(.system(size: waiting ? 18 : 26))
+                    .foregroundStyle(done ? (didTiny ? Color(hex: "#5aa587") : RT.dotOnTime) : (isNext ? RT.ink : RT.inkFaint))
+                    .frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(step.title)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(done ? Color(hex: "#1f5f48") : RT.ink)
-                    if let tiny = step.tiny, !tiny.isEmpty {
-                        Text("Tiny version: \(tiny)")
+                        .foregroundStyle(done ? Color(hex: "#1f5f48") : (waiting ? RT.inkFaint : RT.ink))
+                    if done, didTiny, let tinyText {
+                        Text("Did the tiny version: \(tinyText)")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Color(hex: "#3d7a62"))
+                    } else if waiting, index > 0, s.isOpen(now: now) {
+                        Text("After step \(index)")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(RT.inkFaint)
+                    } else if isNext, let tinyText {
+                        Text("Tiny version: \(tinyText)")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(RT.inkMuted)
                     }
                 }
                 Spacer()
             }
-            .padding(.horizontal, 16)
-            .frame(minHeight: 68)
-            .background(RoundedRectangle(cornerRadius: 16).fill(done ? Color(hex: "#e3f1ec") : RT.card))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(done ? Color(hex: "#b9dccd") : RT.cardBorder, lineWidth: 1))
+            if isNext {
+                HStack(spacing: 10) {
+                    Button { Task { await coordinator.completeStep(index) } } label: {
+                        Text("Done")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                            .background(RoundedRectangle(cornerRadius: 12).fill(RT.dotOnTime))
+                    }
+                    .buttonStyle(RTPressStyle())
+                    if tinyText != nil {
+                        Button { Task { await coordinator.completeStep(index, tiny: true) } } label: {
+                            Text("Did tiny version")
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(RT.dotOnTime)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .background(RoundedRectangle(cornerRadius: 12).fill(Color(hex: "#e3f3ec")))
+                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color(hex: "#b9dccd"), lineWidth: 1))
+                        }
+                        .buttonStyle(RTPressStyle())
+                    }
+                }
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(s.tiny || (now > s.deadline && !s.isComplete))
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 68, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16).fill(done ? Color(hex: "#e3f1ec") : RT.card))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(done ? Color(hex: "#b9dccd") : (isNext ? RT.dotOnTime : RT.cardBorder), lineWidth: isNext ? 1.5 : 1)
+        )
+        .opacity(waiting ? 0.7 : 1)
+        .accessibilityElement(children: .contain)
+        .accessibilityValue(done ? (didTiny ? "Done, tiny version" : "Done") : (isNext ? "Next step" : "Not yet"))
     }
 }
 

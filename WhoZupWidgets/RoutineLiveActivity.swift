@@ -107,7 +107,9 @@ private struct RoutineLockScreenView: View {
 
             HStack(spacing: 4) {
                 ForEach(state.done.indices, id: \.self) { i in
-                    Capsule().fill(state.tiny || state.done[i] ? Palette.green : Palette.track)
+                    Capsule().fill(state.done[i] || state.tiny
+                                   ? (state.isTiny(i) ? Palette.green.opacity(0.55) : Palette.green)
+                                   : Palette.track)
                         .frame(height: 5)
                 }
             }
@@ -145,6 +147,17 @@ private struct StepRow: View {
                         .lineLimit(2)
                 }
                 Spacer(minLength: 8)
+                // A step with a tiny version can be marked either way.
+                if attributes.tinyVersion(of: next) != nil {
+                    Button(intent: RoutineStepDoneIntent(groupId: attributes.groupId, step: next, tiny: true)) {
+                        Text("Tiny")
+                            .font(.callout.weight(.bold))
+                            .padding(.horizontal, 6)
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(Palette.green)
+                }
                 Button(intent: RoutineStepDoneIntent(groupId: attributes.groupId, step: next)) {
                     Label("Done", systemImage: "checkmark")
                         .font(.body.weight(.bold))

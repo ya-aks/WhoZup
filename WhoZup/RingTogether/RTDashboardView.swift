@@ -208,7 +208,7 @@ struct RTDashboardView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(RT.ink)
                 if let routine {
-                    RTRoutineBar(done: routine.done, tiny: routine.tiny)
+                    RTRoutineBar(done: routine.done, tiny: routine.tiny, tinySteps: routine.tinySteps)
                         .frame(width: 120)
                     Text("Routine \(routine.isComplete && !routine.tiny ? "done" : routine.summary.lowercased())")
                         .font(.system(size: 11, weight: .semibold))
@@ -457,7 +457,9 @@ private struct RTMonthTimeline: View {
         if let routine = entry.routine, !routine.tiny, routine.total > 1 {
             VStack(spacing: 1) {
                 ForEach(routine.done.indices, id: \.self) { i in
-                    Rectangle().fill(routine.done[i] ? RT.dotOnTime : Color(hex: "#e1d9c8"))
+                    Rectangle().fill(routine.done[i]
+                                     ? (routine.isTiny(i) ? Color(hex: "#8fc4ae") : RT.dotOnTime)
+                                     : Color(hex: "#e1d9c8"))
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 3))

@@ -20,6 +20,10 @@ nonisolated struct RoutineActivityAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
         var done: [Bool]
         var tiny: Bool
+        /// Per step: done with its tiny version.
+        var tinySteps: [Bool]? = nil
+
+        func isTiny(_ i: Int) -> Bool { tiny || (tinySteps?.indices.contains(i) == true && tinySteps![i]) }
 
         var doneCount: Int { done.filter { $0 }.count }
         var isComplete: Bool { tiny || (!done.isEmpty && !done.contains(false)) }
@@ -31,7 +35,14 @@ nonisolated struct RoutineActivityAttributes: ActivityAttributes {
     var groupName: String
     var habitName: String
     var steps: [String]
+    /// Each step's tiny version ("" when it has none).
+    var tinies: [String]? = nil
     var deadline: Date
+
+    func tinyVersion(of i: Int) -> String? {
+        guard let t = tinies, t.indices.contains(i), !t[i].isEmpty else { return nil }
+        return t[i]
+    }
 }
 
 /// Marks one step of the running routine done, from the Live Activity.
@@ -41,16 +52,19 @@ struct RoutineStepDoneIntent: LiveActivityIntent {
 
     @Parameter(title: "Group ID") var groupId: String
     @Parameter(title: "Step") var step: Int
+    /// Done with the step's tiny version instead of the full step.
+    @Parameter(title: "Tiny version") var tiny: Bool
 
     init() {}
-    init(groupId: String, step: Int) {
+    init(groupId: String, step: Int, tiny: Bool = false) {
         self.groupId = groupId
         self.step = step
+        self.tiny = tiny
     }
 
     func perform() async throws -> some IntentResult {
         #if !WIDGET_EXTENSION
-        await RoutineCoordinator.shared.setStep(step, done: true, groupId: groupId)
+        await RoutineCoordinator.shared.completeStep(step, tiny: tiny, groupId: groupId)
         #endif
         return .result()
     }

@@ -136,11 +136,13 @@ struct RTGroupDetailView: View {
 
                 heroCard(group).padding(.top, 14)
 
-                // Habits are personal and Check-ins only.
-                if group.type == .accountability, let me = group.roster.first(where: { $0.isYou }) {
+                // "What it is" first: your habit (Check-ins only; habits are
+                // personal), or the invitation to add one.
+                let me = group.type == .accountability ? group.roster.first(where: { $0.isYou }) : nil
+                if let me {
                     if let habit = me.habit {
-                        RTTodayRoutineCard(groupId: group.id, habit: habit, routine: me.routine, alarm: group.alarm)
-                            .padding(.top, 12)
+                        RTYourHabitSection(habit: habit, alarm: group.alarm) { showHabitSheet = true }
+                            .padding(.top, 18)
                     } else {
                         RTAddHabitCard(
                             othersWithHabit: group.roster.filter { !$0.isYou && $0.hasHabit }.count,
@@ -150,9 +152,15 @@ struct RTGroupDetailView: View {
                     }
                 }
 
-                RTCheckInCard(groupId: group.id, accent: group.type.accent, topSpacing: 12)
-
                 actionRow(group).padding(.top, 12)
+
+                // Then "today's status": routine progress and the check-in.
+                if let me, let habit = me.habit {
+                    RTTodayRoutineCard(groupId: group.id, habit: habit, routine: me.routine, alarm: group.alarm)
+                        .padding(.top, 26)
+                }
+
+                RTCheckInCard(groupId: group.id, accent: group.type.accent, topSpacing: 12)
 
                 liveStatusHeader.padding(.top, 26)
 
@@ -226,30 +234,6 @@ struct RTGroupDetailView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.85))
                     .padding(.top, 6)
-            }
-
-            if group.type == .accountability, let habit = group.roster.first(where: { $0.isYou })?.habit {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("THEN YOUR HABIT · \(habit.name.uppercased())")
-                        .font(.system(size: 12, weight: .bold))
-                        .tracking(0.5)
-                        .foregroundStyle(.white.opacity(0.75))
-                    Text(habit.steps.map(\.title).joined(separator: " · "))
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.white)
-                    HStack {
-                        Text("Finish within \(habit.windowMinutes) min")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.8))
-                        Spacer()
-                        Button("Edit habit") { showHabitSheet = true }
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.white)
-                    }
-                }
-                .padding(.top, 14)
-                .overlay(alignment: .top) { Rectangle().fill(.white.opacity(0.22)).frame(height: 1) }
-                .padding(.top, 14)
             }
 
             if canEdit {
@@ -519,7 +503,7 @@ struct RTMemberRow: View {
         let skipped = member.status == .snoozed || member.status == .silentLate || member.status == .runningLate
         if let routine = member.routine, member.status == .wokeUp {
             HStack(spacing: 8) {
-                RTRoutineBar(done: routine.done, tiny: routine.tiny)
+                RTRoutineBar(done: routine.done, tiny: routine.tiny, tinySteps: routine.tinySteps)
                     .frame(width: 96)
                 Text(routineLabel(routine))
                     .font(.system(size: 11, weight: .bold))

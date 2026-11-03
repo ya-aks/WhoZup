@@ -68,6 +68,8 @@ struct RoutineSession: Codable, Equatable {
     var day: String
     var done: [Bool]
     var tiny: Bool
+    /// Per step: done with its tiny version.
+    var tinySteps: [Bool]?
     var startedAt: Date
     var deadline: Date
     var completedAt: Date?
@@ -79,7 +81,7 @@ struct RoutineSession: Codable, Equatable {
 
     var progress: RoutineProgress {
         RoutineProgress(
-            day: day, done: done, tiny: tiny,
+            day: day, done: done, tiny: tiny, tinySteps: tinySteps,
             startedAt: Timestamp(date: startedAt),
             deadline: Timestamp(date: deadline),
             completedAt: completedAt.map { Timestamp(date: $0) }
@@ -87,7 +89,7 @@ struct RoutineSession: Codable, Equatable {
     }
 
     var contentState: RoutineActivityAttributes.ContentState {
-        .init(done: done, tiny: tiny)
+        .init(done: done, tiny: tiny, tinySteps: tinySteps)
     }
 }
 
@@ -138,6 +140,7 @@ final class RoutineCoordinator {
         let new = RoutineSession(
             groupId: groupId, groupName: groupName, uid: uid, habit: habit, day: day,
             done: Array(repeating: false, count: habit.steps.count), tiny: false,
+            tinySteps: Array(repeating: false, count: habit.steps.count),
             startedAt: now,
             deadline: now.addingTimeInterval(TimeInterval(habit.windowMinutes * 60)),
             completedAt: nil
@@ -166,17 +169,17 @@ final class RoutineCoordinator {
 
     // MARK: Progress
 
-    func setStep(_ index: Int, done: Bool, groupId: String? = nil) async {
+    /// Marks a step done. Steps are sequential and one-way: only the next step
+    /// can be completed (step 2 before step 1 makes no sense — each cues the
+    /// next), and a done step can't be undone.
+    /// `tiny`: done with the step's tiny version rather than the full step.
+    func completeStep(_ index: Int, tiny: Bool = false, groupId: String? = nil) async {
         guard var s = session, groupId == nil || s.groupId == groupId,
-              s.done.indices.contains(index), Date() <= s.deadline || s.isComplete else { return }
-        s.done[index] = done
-        await commit(s)
-    }
-
-    /// Finish with the tiny version of the routine.
-    func useTinyVersion() async {
-        guard var s = session, !s.isComplete else { return }
-        s.tiny = true
+              s.isOpen(), index == s.nextIndex else { return }
+        s.done[index] = true
+        var tinySteps = s.tinySteps ?? Array(repeating: false, count: s.done.count)
+        if tinySteps.indices.contains(index) { tinySteps[index] = tiny && !(s.habit.steps[index].tiny ?? "").isEmpty }
+        s.tinySteps = tinySteps
         await commit(s)
     }
 
@@ -277,7 +280,7 @@ final class RoutineCoordinator {
         let what = s.habit.showSteps ? "finished their \(s.habit.name) routine" : "finished their routine"
         Firestore.firestore().collection("groups").document(s.groupId).collection("activity").addDocument(data: [
             "kind": "routine_done",
-            "message": "\(name) \(what)\(s.tiny ? " (tiny version)" : "")",
+            "message": "\(name) \(what)\(s.tiny || (s.tinySteps ?? []).contains(true) ? " (with a tiny version)" : "")",
             "actorUid": s.uid,
             "createdAt": FieldValue.serverTimestamp(),
         ]) { _ in }
@@ -293,7 +296,8 @@ final class RoutineCoordinator {
         }
         let attributes = RoutineActivityAttributes(
             groupId: s.groupId, groupName: s.groupName, habitName: s.habit.name,
-            steps: s.habit.steps.map(\.title), deadline: s.deadline
+            steps: s.habit.steps.map(\.title), tinies: s.habit.steps.map { $0.tiny ?? "" },
+            deadline: s.deadline
         )
         do {
             let activity = try Activity.request(

@@ -54,6 +54,17 @@ final class HabitModelsTests: XCTestCase {
         XCTAssertEqual(routine.summary, "Tiny version")
     }
 
+    func testPerStepTinyVersionsParseAndCount() {
+        let routine = RoutineProgress(map: ["day": "d", "done": [true, true, false], "tiny": false,
+                                            "tinySteps": [false, true, false]])
+        XCTAssertEqual(routine?.isTiny(0), false)
+        XCTAssertEqual(routine?.isTiny(1), true)
+        XCTAssertEqual(routine?.tinyCount, 1)
+        XCTAssertEqual(routine?.isComplete, false, "a tiny step still has to be followed by the rest")
+        XCTAssertEqual(RoutineProgress(map: ["day": "d", "done": [true], "tiny": false])?.isTiny(0), false,
+                       "routines saved before per-step tiny versions read as full steps")
+    }
+
     func testRoutineWindowClosesAtDeadline() {
         let deadline = Date(timeIntervalSince1970: 1_000_000)
         let routine = RoutineProgress(day: "d", done: [false], tiny: false, deadline: Timestamp(date: deadline))

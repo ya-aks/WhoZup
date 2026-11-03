@@ -63,17 +63,21 @@ struct RoutineProgress: Codable, Hashable {
     /// "yyyy-MM-dd" of the alarm this routine follows.
     var day: String
     var done: [Bool]
-    /// Finished with the tiny version instead of the full steps.
+    /// Finished with the tiny version instead of the full steps (whole
+    /// routine — kept for routines saved before per-step tiny versions).
     var tiny: Bool
+    /// Per step: done with its tiny version rather than the full step.
+    var tinySteps: [Bool]?
     var startedAt: Timestamp?
     var deadline: Timestamp?
     var completedAt: Timestamp?
 
-    init(day: String, done: [Bool], tiny: Bool, startedAt: Timestamp? = nil,
+    init(day: String, done: [Bool], tiny: Bool, tinySteps: [Bool]? = nil, startedAt: Timestamp? = nil,
          deadline: Timestamp? = nil, completedAt: Timestamp? = nil) {
         self.day = day
         self.done = done
         self.tiny = tiny
+        self.tinySteps = tinySteps
         self.startedAt = startedAt
         self.deadline = deadline
         self.completedAt = completedAt
@@ -84,6 +88,7 @@ struct RoutineProgress: Codable, Hashable {
         guard let map = map as? [String: Any], let day = map["day"] as? String,
               let done = map["done"] as? [Bool] else { return nil }
         self.init(day: day, done: done, tiny: map["tiny"] as? Bool ?? false,
+                  tinySteps: map["tinySteps"] as? [Bool],
                   startedAt: map["startedAt"] as? Timestamp,
                   deadline: map["deadline"] as? Timestamp,
                   completedAt: map["completedAt"] as? Timestamp)
@@ -102,11 +107,16 @@ struct RoutineProgress: Codable, Hashable {
 
     var firestoreData: [String: Any] {
         var map: [String: Any] = ["day": day, "done": done, "tiny": tiny]
+        if let tinySteps { map["tinySteps"] = tinySteps }
         if let startedAt { map["startedAt"] = startedAt }
         if let deadline { map["deadline"] = deadline }
         map["completedAt"] = completedAt ?? NSNull()
         return map
     }
+
+    /// Whether step `i` was done with its tiny version.
+    func isTiny(_ i: Int) -> Bool { tiny || (tinySteps?.indices.contains(i) == true && tinySteps![i]) }
+    var tinyCount: Int { (tinySteps ?? []).filter { $0 }.count }
 
     /// The short label the roster and reports show.
     var summary: String {

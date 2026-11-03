@@ -74,14 +74,20 @@ struct RTWalkStep: Identifiable {
                 .init(id: 0, title: "Set your alarm",
                       caption: "Pick an alarm time and repeat days — or set a one-time alarm. This is your personal alarm time.",
                       screenType: .alarm(.accountability)),
-                .init(id: 1, title: "Tap “I’m up” when it rings",
-                      caption: "It rings locally on your device, even when locked. You can dismiss or snooze — no one else can touch your alarm.",
+                .init(id: 1, title: "Add a habit (optional)",
+                      caption: "Attach up to 3 steps to your wake-up, each with an optional tiny version, and give yourself 1–59 minutes to finish. Habits are yours alone.",
+                      screenType: .habit),
+                .init(id: 2, title: "Stop it on the first ring",
+                      caption: "It rings locally on your device, even when locked. Stop it on time and your routine starts; snooze or run late and that day has no routine.",
                       screenType: .ring(.accountability)),
-                .init(id: 2, title: "Your group sees it — live",
-                      caption: "Woke up, snoozed, or went silent: your status updates for everyone instantly on the shared dashboard.",
+                .init(id: 3, title: "Work through your routine",
+                      caption: "Steps go in order: mark each one Done or Did tiny version, right from the lock screen. Leave it and a reminder keeps it waiting.",
+                      screenType: .routine),
+                .init(id: 4, title: "Your group sees it — live",
+                      caption: "Woke up, snoozed, or went silent, plus how many routine steps you've done. Step names stay private unless you share them.",
                       screenType: .roster(.accountability)),
-                .init(id: 3, title: "Build your streak",
-                      caption: "Every on-time alarm adds to your streak. See the whole month at a glance in Rise Report.",
+                .init(id: 5, title: "Build your streak",
+                      caption: "Every on-time alarm adds to your streak. In Rise Report, woke-up days split into your routine steps.",
                       screenType: .streak(.accountability))
             ]
         case .shared:
@@ -123,6 +129,8 @@ enum RTMockScreenType {
     case ring(RTGroupType)
     case roster(RTGroupType)
     case streak(RTGroupType)
+    case habit
+    case routine
     case eventDetail
     case eventRespond
     case eventRoster
@@ -184,6 +192,10 @@ extension RTMockScreen where Content == AnyView {
             self.content = AnyView(RTMockRoster(type: gt))
         case .streak(let gt):
             self.content = AnyView(RTMockStreak(type: gt))
+        case .habit:
+            self.content = AnyView(RTMockHabit())
+        case .routine:
+            self.content = AnyView(RTMockRoutine())
         case .eventDetail:
             self.content = AnyView(RTMockEventDetail())
         case .eventRespond:
@@ -257,7 +269,8 @@ private struct RTMockRoster: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            row("YO", RT.ink, "You", .wokeUp, "up at 6:31 AM")
+            row("YO", RT.ink, "You", .wokeUp, "up at 6:31 AM",
+                routine: type == .accountability ? [true, true, false] : nil)
             Divider().overlay(RT.divider)
             row("GA", Color(hex: "#5b8bb5"), "Gaurav", .snoozed, "snoozed")
             Divider().overlay(RT.divider)
@@ -266,12 +279,21 @@ private struct RTMockRoster: View {
         .padding(16)
     }
 
-    private func row(_ initials: String, _ color: Color, _ name: String, _ status: RTStatus, _ detail: String) -> some View {
+    private func row(_ initials: String, _ color: Color, _ name: String, _ status: RTStatus, _ detail: String,
+                     routine: [Bool]? = nil) -> some View {
         HStack(spacing: 10) {
             RTAvatar(initials: initials, color: color, size: 34)
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(name).font(.system(size: 14, weight: .bold)).foregroundStyle(RT.ink)
                 Text(detail).font(.system(size: 12, weight: .medium)).foregroundStyle(RT.inkMuted)
+                if let routine {
+                    HStack(spacing: 6) {
+                        RTRoutineBar(done: routine).frame(width: 70)
+                        Text("Routine \(routine.filter { $0 }.count) of \(routine.count)")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(RT.inkSecondary)
+                    }
+                }
             }
             Spacer()
             RTStatusChip(status: status)
@@ -307,8 +329,7 @@ private struct RTMockStreak: View {
 
             HStack(spacing: 3) {
                 ForEach(cells.indices, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(cells[i]?.chipColor ?? RT.cardBorder.opacity(0.55))
+                    cell(i)
                         .frame(height: 24)
                         .overlay(
                             RoundedRectangle(cornerRadius: 3)
@@ -317,7 +338,7 @@ private struct RTMockStreak: View {
                 }
             }
 
-            Text(type == .accountability ? "11 woke · 2 snoozed · 1 late" : "11/14 sessions completed on-time")
+            Text(type == .accountability ? "11 woke · 2 snoozed · 1 late · routine 9 of 11" : "11/14 sessions completed on-time")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(RT.inkMuted)
         }
@@ -326,6 +347,101 @@ private struct RTMockStreak: View {
         .background(RoundedRectangle(cornerRadius: 16).fill(RT.canvas))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(RT.cardBorder, lineWidth: 1))
         .padding(16)
+    }
+
+    /// Check-ins woke days split into routine steps (3 steps, done count varies).
+    @ViewBuilder private func cell(_ i: Int) -> some View {
+        if type == .accountability, cells[i] == .wokeUp {
+            let doneSteps = i % 5 == 2 ? 1 : 3
+            VStack(spacing: 1) {
+                ForEach(0..<3, id: \.self) { s in
+                    Rectangle().fill(s < doneSteps ? RT.dotOnTime : Color(hex: "#e1d9c8"))
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+        } else {
+            RoundedRectangle(cornerRadius: 3)
+                .fill(cells[i]?.chipColor ?? RT.cardBorder.opacity(0.55))
+        }
+    }
+}
+
+/// Your habit: name, steps with tiny versions, and the finish window.
+private struct RTMockHabit: View {
+    private let steps: [(String, String?)] = [("Drink water", nil), ("Put on running shoes", "Step outside"),
+                                              ("Run 2 km", "Walk to the corner")]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("YOUR HABIT")
+                    .font(.system(size: 11, weight: .bold)).tracking(0.5)
+                    .foregroundStyle(RT.inkMuted)
+                Spacer()
+                Text("Finish in 30 min")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(RTGroupType.accountability.accent)
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(Capsule().fill(RTGroupType.accountability.badgeBackground))
+            }
+            Text("Morning run").font(.rtDisplay(22, .bold)).foregroundStyle(RT.ink)
+            ForEach(steps.indices, id: \.self) { i in
+                HStack(alignment: .top, spacing: 10) {
+                    Text("\(i + 1)")
+                        .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+                        .background(Circle().fill(RTGroupType.accountability.accent))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(steps[i].0).font(.system(size: 14, weight: .semibold)).foregroundStyle(RT.ink)
+                        if let tiny = steps[i].1 {
+                            Text("Tiny: \(tiny)").font(.system(size: 12, weight: .medium)).foregroundStyle(RT.inkMuted)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(20)
+    }
+}
+
+/// The routine after Stop: done, tiny, and the next step's two buttons.
+private struct RTMockRoutine: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("TODAY'S ROUTINE")
+                    .font(.system(size: 11, weight: .bold)).tracking(0.5)
+                    .foregroundStyle(RT.inkMuted)
+                Spacer()
+                Text("by 7:01 AM").font(.system(size: 12, weight: .bold)).foregroundStyle(RT.dotSnoozed)
+            }
+            RTRoutineBar(done: [true, true, false], tinySteps: [false, true, false], height: 8)
+            row("Drink water", note: "Done", done: true)
+            row("Put on running shoes", note: "Did tiny version", done: true)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Run 2 km").font(.system(size: 15, weight: .bold)).foregroundStyle(RT.ink)
+                HStack(spacing: 8) {
+                    Text("Done")
+                        .font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 9)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(RT.dotOnTime))
+                    Text("Did tiny version")
+                        .font(.system(size: 13, weight: .bold)).foregroundStyle(RT.dotOnTime)
+                        .frame(maxWidth: .infinity).padding(.vertical, 9)
+                        .background(RoundedRectangle(cornerRadius: 12).stroke(RT.dotOnTime, lineWidth: 1.5))
+                }
+            }
+        }
+        .padding(20)
+    }
+
+    private func row(_ title: String, note: String, done: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(RT.dotOnTime)
+            Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(RT.inkSecondary)
+            Spacer()
+            Text(note).font(.system(size: 11, weight: .semibold)).foregroundStyle(RT.inkMuted)
+        }
     }
 }
 

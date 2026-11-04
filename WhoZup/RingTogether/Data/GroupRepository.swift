@@ -300,6 +300,15 @@ final class GroupRepository {
         ], merge: true) { _ in }
     }
 
+    /// Plans: a loud "the group is waiting" push to one member who isn't up
+    /// (sent by the `nudgeMember` Cloud Function, at most every 5 minutes).
+    func nudge(groupId: String, toUid: String) {
+        guard let uid = currentUid else { return }
+        db.collection("groups").document(groupId).collection("nudges").addDocument(data: [
+            "byUid": uid, "toUid": toUid, "createdAt": FieldValue.serverTimestamp(),
+        ]) { _ in }
+    }
+
     /// Plans: a host's "Ask now". The `headcountAskNow` Cloud Function sends it
     /// to the chosen audience (admins only, at most 5 per session).
     func askNow(groupId: String, sessionKey: String, audience: String, question: String, note: String?) {
@@ -526,6 +535,7 @@ final class GroupRepository {
             planMeetAt: g.meetAt?.dateValue(),
             session: session,
             planAsks: g.headcountAsks ?? [],
+            planFlagNotUpMinutes: g.flagNotUpMinutes,
             detailedDescription: g.detailedDescription,
             reminderCount: g.reminderCount ?? 0
         )

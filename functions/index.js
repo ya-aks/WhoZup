@@ -314,3 +314,4 @@ exports.applyInviteAdminOnJoin = onDocumentCreated(
 const headcount = require("./headcount");
 exports.headcountScheduler = headcount.headcountScheduler;
 exports.headcountAskNow = headcount.headcountAskNow;
+exports.nudgeMember = headcount.nudgeMember;

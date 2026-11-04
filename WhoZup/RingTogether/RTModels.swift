@@ -269,6 +269,8 @@ struct RTGroup: Identifiable {
     var session: RTPlanSession? = nil
     /// Plans: the host's scheduled headcount asks.
     var planAsks: [RTHeadcountAsk] = []
+    /// One-time plan with an alarm: flag anyone not up this long after it rings.
+    var planFlagNotUpMinutes: Int? = nil
     let detailedDescription: String?
     /// Admin nudges already sent for this event; gates the max-2 reminder cap.
     let reminderCount: Int
@@ -295,6 +297,7 @@ struct RTGroup: Identifiable {
         planMeetAt: Date? = nil,
         session: RTPlanSession? = nil,
         planAsks: [RTHeadcountAsk] = [],
+        planFlagNotUpMinutes: Int? = nil,
         detailedDescription: String? = nil,
         reminderCount: Int = 0
     ) {
@@ -306,6 +309,7 @@ struct RTGroup: Identifiable {
         self.planMeetAt = planMeetAt
         self.session = session
         self.planAsks = planAsks
+        self.planFlagNotUpMinutes = planFlagNotUpMinutes
         self.detailedDescription = detailedDescription
         self.alarmAnchor = alarmAnchor
         self.id = id

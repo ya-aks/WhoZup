@@ -159,6 +159,13 @@ struct RTGroupDetailView: View {
 
                 actionRow(group).padding(.top, 12)
 
+                // A one-time plan with an alarm, on the day: who's up, who isn't.
+                if group.planKind == .onceAlarm, let session = group.session, let alarmAt = session.alarmAt,
+                   session.dayKey == GroupRepository.dayKey(), Date() >= alarmAt.addingTimeInterval(-30 * 60) {
+                    RTMorningOfCard(group: group, session: session, alarmAt: alarmAt)
+                        .padding(.top, 22)
+                }
+
                 // Plans: the host's headcount for the next session.
                 if let session = group.session, group.isCurrentUserAdmin {
                     RTHeadcountCard(groupId: group.id, headcount: RTHeadcount(group: group, session: session),

@@ -120,7 +120,10 @@ final class RTAlarmSync {
                     "\($0.name)/\($0.steps.map(\.title).joined(separator: ","))/\($0.windowMinutes)"
                 } ?? ""
                 let fire = group.alarmOnceFireDate.map { String(Int($0.timeIntervalSince1970)) } ?? ""
-                return "\(group.id):\(group.alarm):\(group.alarmDays.map(String.init).joined(separator: "-")):\(group.alarmOnce ? "1" : "0"):\(fire):\(plan)"
+                // With skips, today's date too: a skipped day coming back into
+                // the week (once it has passed) must re-run reconcile.
+                let skips = (me?.skips ?? []).isEmpty ? "" : (me?.skips ?? []).sorted().joined(separator: ",") + "@" + GroupRepository.dayKey()
+                return "\(group.id):\(group.alarm):\(group.alarmDays.map(String.init).joined(separator: "-")):\(group.alarmOnce ? "1" : "0"):\(fire):\(skips):\(plan)"
             }
             .sorted()
             .joined(separator: "|")
@@ -149,14 +152,41 @@ final class RTAlarmSync {
     /// every repeating group that wants that time. If any rings every day (empty
     /// day set), the union is every day too. Returns `[]` for "every day".
     /// One-time groups are excluded — they don't recur.
-    static func unionDays(forTime time: String, in groups: [RTGroup]) -> [Int] {
+    static func unionDays(forTime time: String, in groups: [RTGroup], now: Date = Date()) -> [Int] {
         let atTime = groups.filter {
             ($0.type == .accountability || $0.type == .shared) && $0.alarm == time && !$0.alarmOnce
         }
-        if atTime.contains(where: { $0.alarmDays.isEmpty }) { return [] }
         var set = Set<Int>()
-        atTime.forEach { set.formUnion($0.alarmDays) }
-        return set.sorted()
+        atTime.forEach { set.formUnion(ringDays($0, now: now)) }
+        return set.count == 7 ? [] : set.sorted()
+    }
+
+    /// The weekdays a repeating group's alarm should ring this coming week:
+    /// its days, minus any day in the next seven you're skipping (a plan
+    /// session). The weekday comes back once the skipped date has passed and
+    /// the next reconcile runs.
+    static func ringDays(_ group: RTGroup, now: Date = Date()) -> Set<Int> {
+        var days = group.alarmDays.isEmpty ? Set(1...7) : Set(group.alarmDays)
+        guard let skips = group.roster.first(where: { $0.isYou })?.skips, !skips.isEmpty else { return days }
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: now)
+        for offset in 0..<7 {
+            guard let day = cal.date(byAdding: .day, value: offset, to: today) else { continue }
+            if skips.contains(GroupRepository.dayKey(day)) { days.remove(cal.component(.weekday, from: day)) }
+        }
+        return days
+    }
+
+    /// Whether you're skipping this group's alarm entirely right now: a
+    /// one-time plan alarm on a skipped date, or a repeating one skipped on
+    /// every day it would ring this week.
+    static func isSkipped(_ group: RTGroup, now: Date = Date()) -> Bool {
+        let skips = group.roster.first(where: { $0.isYou })?.skips ?? []
+        guard !skips.isEmpty else { return false }
+        if group.alarmOnce {
+            return group.alarmOnceFireDate.map { skips.contains(GroupRepository.dayKey($0)) } ?? false
+        }
+        return ringDays(group, now: now).isEmpty
     }
 
     /// The alarms that *should* exist, keyed by slot (see `slotKey`): repeating
@@ -165,7 +195,7 @@ final class RTAlarmSync {
     static func desiredAlarms(for groups: [RTGroup], now: Date = Date()) -> [String: [String]] {
         var desired: [String: [String]] = [:]
         for group in groups where group.type == .accountability || group.type == .shared {
-            guard !group.alarm.isEmpty, !onceIsOver(group, now: now) else { continue }
+            guard !group.alarm.isEmpty, !onceIsOver(group, now: now), !isSkipped(group, now: now) else { continue }
             desired[slotKey(for: group), default: []].append(group.id)
         }
         return desired.mapValues { $0.sorted() }

@@ -141,6 +141,8 @@ struct RTMember: Identifiable {
     var hasChecklist: Bool = false
     /// The member's own alarm rings once (Check-ins).
     var alarmOnce: Bool = false
+    /// Plans: session dates ("yyyy-MM-dd") this member is skipping.
+    var skips: Set<String> = []
     /// Today's routine, present only once it has started (an on-time stop).
     var routine: RoutineProgress? = nil
 
@@ -263,6 +265,8 @@ struct RTGroup: Identifiable {
     var planStartTime: String? = nil
     /// One-time plan with an alarm: when it starts.
     var planMeetAt: Date? = nil
+    /// Plans with sessions (one-time with an alarm, repeating): the next one.
+    var session: RTPlanSession? = nil
     let detailedDescription: String?
     /// Admin nudges already sent for this event; gates the max-2 reminder cap.
     let reminderCount: Int
@@ -287,6 +291,7 @@ struct RTGroup: Identifiable {
         planKind: RTPlanKind? = nil,
         planStartTime: String? = nil,
         planMeetAt: Date? = nil,
+        session: RTPlanSession? = nil,
         detailedDescription: String? = nil,
         reminderCount: Int = 0
     ) {
@@ -296,6 +301,7 @@ struct RTGroup: Identifiable {
         self.planKind = planKind
         self.planStartTime = planStartTime
         self.planMeetAt = planMeetAt
+        self.session = session
         self.detailedDescription = detailedDescription
         self.alarmAnchor = alarmAnchor
         self.id = id
@@ -404,5 +410,52 @@ struct RTGroup: Identifiable {
         type == .accountability
             ? "Silent after 15 min with no dismiss or snooze"
             : "Each phone rings & dismisses on its own device"
+    }
+}
+
+/// A member's answer for one session of a plan.
+enum RTSessionAnswer: String {
+    case coming, runningLate = "running_late", skipping
+
+    var label: String {
+        switch self {
+        case .coming: return "In"
+        case .runningLate: return "Running late"
+        case .skipping: return "Skipping"
+        }
+    }
+}
+
+/// One member's answer to a session.
+struct RTSessionReply: Equatable {
+    let answer: RTSessionAnswer
+    let eta: String?
+}
+
+/// One upcoming session of a plan, with whether you're skipping it.
+struct RTUpcomingSession: Equatable, Identifiable {
+    let dayKey: String
+    let date: Date
+    let skipping: Bool
+    var id: String { dayKey }
+}
+
+/// The next session of a plan, with everyone's answers for it.
+struct RTPlanSession: Equatable {
+    /// "yyyy-MM-dd"
+    let dayKey: String
+    /// When it starts (date + start time).
+    let start: Date
+    /// When everyone's alarm rings for it, if the plan has one.
+    let alarmAt: Date?
+    /// Everyone's in unless they skip ("in"), versus asking each time.
+    let everyoneInByDefault: Bool
+    /// Answers by uid. With `everyoneInByDefault`, no answer reads as In.
+    let replies: [String: RTSessionReply]
+    /// The next few sessions.
+    let upcoming: [RTUpcomingSession]
+
+    func answer(for uid: String) -> RTSessionAnswer? {
+        replies[uid]?.answer ?? (everyoneInByDefault ? .coming : nil)
     }
 }

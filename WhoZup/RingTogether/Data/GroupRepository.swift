@@ -66,6 +66,10 @@ final class GroupRepository {
     private var usageListener: ListenerRegistration?
     private var memberListeners: [String: ListenerRegistration] = [:]
     private var statusListeners: [String: ListenerRegistration] = [:]
+    /// Plans: one listener per plan on its next session's answers, keyed by group.
+    private var sessionListeners: [String: (dayKey: String, listener: ListenerRegistration)] = [:]
+    /// Plans: the next session's answers, by group then uid.
+    private var sessionReplies: [String: [String: RTSessionReply]] = [:]
 
     // Usage-doc bookkeeping, for seeding the events-created counter once for
     // users who already hosted events before the counter existed.
@@ -126,6 +130,7 @@ final class GroupRepository {
         usageListener?.remove(); usageListener = nil
         memberListeners.values.forEach { $0.remove() }; memberListeners.removeAll()
         statusListeners.values.forEach { $0.remove() }; statusListeners.removeAll()
+        sessionListeners.values.forEach { $0.listener.remove() }; sessionListeners.removeAll(); sessionReplies.removeAll()
         rawGroups.removeAll(); members.removeAll(); statuses.removeAll(); pendingStatuses.removeAll(); pendingOwnMember.removeAll()
         groups = []
         eventsCreatedCount = 0
@@ -166,6 +171,7 @@ final class GroupRepository {
         for goneID in Set(rawGroups.keys).subtracting(liveIDs) {
             memberListeners[goneID]?.remove(); memberListeners[goneID] = nil
             statusListeners[goneID]?.remove(); statusListeners[goneID] = nil
+            sessionListeners[goneID]?.listener.remove(); sessionListeners[goneID] = nil; sessionReplies[goneID] = nil
             rawGroups[goneID] = nil; members[goneID] = nil; statuses[goneID] = nil
             pendingStatuses[goneID] = nil
         }
@@ -209,6 +215,89 @@ final class GroupRepository {
                     }
                 }
         }
+    }
+
+    /// Plans: keeps one listener on each plan's next-session answers, moving it
+    /// along as sessions pass.
+    private func attachSessionListener(groupId gid: String, dayKey: String?) {
+        if sessionListeners[gid]?.dayKey == dayKey { return }
+        sessionListeners[gid]?.listener.remove(); sessionListeners[gid] = nil; sessionReplies[gid] = nil
+        guard let dayKey else { return }
+        let listener = db.collection("groups").document(gid).collection("sessions").document(dayKey)
+            .collection("responses")
+            .addSnapshotListener { [weak self] snap, _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    var replies: [String: RTSessionReply] = [:]
+                    for doc in snap?.documents ?? [] {
+                        guard let decoded = try? doc.data(as: SessionAnswerDoc.self),
+                              let answer = RTSessionAnswer(rawValue: decoded.status) else { continue }
+                        replies[doc.documentID] = RTSessionReply(answer: answer, eta: decoded.eta)
+                    }
+                    self.sessionReplies[gid] = replies
+                    self.rebuild()
+                }
+            }
+        sessionListeners[gid] = (dayKey, listener)
+    }
+
+    /// Plans with sessions: the next `count` sessions from now (a session stays
+    /// "next" until two hours after it starts). Empty for other groups.
+    static func planSessions(_ g: FirestoreGroup, count: Int, now: Date = Date()) -> [Date] {
+        planSessions(kind: g.planKind.flatMap(RTPlanKind.init(rawValue:)), meetAt: g.meetAt?.dateValue(),
+                     startTime: g.startTime, alarmDays: g.alarmDays ?? [],
+                     alarmLeadMinutes: g.hasAlarm == false ? 0 : (g.alarmLeadMinutes ?? 0), count: count, now: now)
+    }
+
+    static func planSessions(kind: RTPlanKind?, meetAt: Date?, startTime: String?, alarmDays: [Int],
+                             alarmLeadMinutes lead: Int, count: Int, now: Date = Date()) -> [Date] {
+        let grace: TimeInterval = 2 * 60 * 60
+        switch kind {
+        case .onceAlarm:
+            guard let meet = meetAt, meet.addingTimeInterval(grace) > now else { return [] }
+            return [meet]
+        case .repeating:
+            guard let startTime else { return [] }
+            let parts = startTime.split(separator: ":").compactMap { Int($0) }
+            guard parts.count >= 2 else { return [] }
+            // Stored days are the alarm's; an alarm that crosses midnight rang
+            // the day before the session, so shift back to session days.
+            let crosses = parts[0] * 60 + parts[1] - lead < 0
+            let days = Set(alarmDays.map { crosses ? ($0 == 7 ? 1 : $0 + 1) : $0 })
+            let cal = Calendar.current
+            var out: [Date] = []
+            for offset in 0..<21 where out.count < count {
+                guard let day = cal.date(byAdding: .day, value: offset, to: cal.startOfDay(for: now)),
+                      let start = cal.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: day) else { continue }
+                let weekday = cal.component(.weekday, from: day)
+                if (days.isEmpty || days.contains(weekday)) && start.addingTimeInterval(grace) > now { out.append(start) }
+            }
+            return out
+        default:
+            return []
+        }
+    }
+
+    /// Answers the next session of a plan (or any upcoming one by `dayKey`).
+    /// Skipping also lands on your member doc, which keeps your alarm quiet
+    /// that day and stops the day ever counting as missed.
+    func setSessionAnswer(groupId: String, dayKey: String, answer: RTSessionAnswer, eta: String? = nil) {
+        guard let uid = currentUid else { return }
+        let group = db.collection("groups").document(groupId)
+        var data: [String: Any] = [
+            "status": answer.rawValue,
+            "respondedAt": Timestamp(date: Date()),
+            "updatedAt": FieldValue.serverTimestamp(),
+        ]
+        data["eta"] = eta ?? NSNull()
+        // Queued, not awaited: the tap is the answer; syncing is our job.
+        group.collection("sessions").document(dayKey).collection("responses").document(uid)
+            .setData(data) { [weak self] error in
+                if let error { Task { @MainActor in self?.lastError = error.localizedDescription } }
+            }
+        group.collection("members").document(uid).setData([
+            "skips": answer == .skipping ? FieldValue.arrayUnion([dayKey]) : FieldValue.arrayRemove([dayKey]),
+        ], merge: true) { _ in }
     }
 
     /// Rebuilds the `RTGroup` list from raw docs + members + statuses.
@@ -289,7 +378,8 @@ final class GroupRepository {
                 // alarm whose time already passed today from showing as missed.
                 let notBefore = (type == .accountability ? doc?.alarmSetAt : g.alarmSetAt)?.dateValue()
                     ?? g.createdAt?.dateValue()
-                if let alarmTime, !alarmTime.isEmpty, !once,
+                let skippingToday = doc?.skips?.contains(Self.dayKey()) == true
+                if let alarmTime, !alarmTime.isEmpty, !once, !skippingToday,
                    MissedAlarm.isTodayMissed(time: alarmTime, days: alarmDays,
                                              lateWindow: lateWindow, notBefore: notBefore) {
                     status = .silentLate
@@ -319,6 +409,7 @@ final class GroupRepository {
                 checklist: (isYou || doc?.checklist?.showSteps == true) ? doc?.checklist?.asChecklist : nil,
                 hasChecklist: type == .accountability && doc?.alarmOnce == true && doc?.checklist != nil,
                 alarmOnce: type == .accountability && doc?.alarmOnce == true,
+                skips: Set(doc?.skips ?? []),
                 // Only today's routine, and only while today's status stands.
                 routine: (isStatusFromToday && statusDoc?.routine?.day == Self.dayKey())
                     ? statusDoc?.routine : nil
@@ -382,6 +473,22 @@ final class GroupRepository {
             return Self.firstOccurrence(of: displayAlarm, after: onceSetAt)
         }()
 
+        // Plans: the next session and everyone's answers for it.
+        let sessionDates = Self.planSessions(g, count: 4)
+        let mySkips = Set(myDoc?.skips ?? [])
+        let session: RTPlanSession? = sessionDates.first.map { next in
+            let lead = g.hasAlarm == false ? nil : g.alarmLeadMinutes
+            return RTPlanSession(
+                dayKey: Self.dayKey(next),
+                start: next,
+                alarmAt: lead.map { next.addingTimeInterval(TimeInterval(-$0 * 60)) },
+                everyoneInByDefault: g.planKind == RTPlanKind.repeating.rawValue ? g.attendanceDefault != "ask" : false,
+                replies: sessionReplies[gid] ?? [:],
+                upcoming: sessionDates.map { RTUpcomingSession(dayKey: Self.dayKey($0), date: $0, skipping: mySkips.contains(Self.dayKey($0))) }
+            )
+        }
+        attachSessionListener(groupId: gid, dayKey: session?.dayKey)
+
         return RTGroup(
             id: gid,
             type: type,
@@ -402,6 +509,7 @@ final class GroupRepository {
             planKind: type == .accountability ? nil : g.planKind.flatMap(RTPlanKind.init(rawValue:)),
             planStartTime: g.startTime,
             planMeetAt: g.meetAt?.dateValue(),
+            session: session,
             detailedDescription: g.detailedDescription,
             reminderCount: g.reminderCount ?? 0
         )
@@ -1229,7 +1337,9 @@ final class GroupRepository {
                 : rawGroups[group.id]?.alarmSetAt)?.dateValue()
                 ?? rawGroups[group.id]?.createdAt?.dateValue()
             let floor = max(deviceFloor, alarmFloor ?? .distantPast)
-            let eligible = missed.filter { $0.fireDate >= floor }
+            // A day you said you'd skip is never a miss.
+            let skipped = Set(members[group.id]?.first { $0.id == uid }?.skips ?? [])
+            let eligible = missed.filter { $0.fireDate >= floor && !skipped.contains($0.dayKey) }
             guard !eligible.isEmpty else { continue }
 
             let earliestKey = eligible.map(\.dayKey).min() ?? todayKey

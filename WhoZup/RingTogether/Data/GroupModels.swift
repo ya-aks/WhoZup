@@ -115,6 +115,19 @@ struct GroupMemberDoc: Codable, Identifiable {
     var alarmOnce: Bool? = nil
     /// The one-off checklist for a one-time alarm (Check-ins), same shape as a habit.
     var checklist: MemberHabit? = nil
+    /// Plans: session dates ("yyyy-MM-dd") this member is skipping. Their alarm
+    /// stays quiet and they're never marked late for these.
+    var skips: [String]? = nil
+}
+
+/// One member's answer for one session of a plan
+/// (`groups/{id}/sessions/{yyyy-MM-dd}/responses/{uid}`).
+struct SessionAnswerDoc: Codable, Identifiable {
+    @DocumentID var id: String?          // the member's uid
+    /// "coming" | "running_late" | "skipping"
+    var status: String
+    var eta: String?
+    var respondedAt: Timestamp?
 }
 
 /// An append-only activity-feed entry (`groups/{id}/activity/{id}`).

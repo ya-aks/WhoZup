@@ -159,6 +159,12 @@ struct RTGroupDetailView: View {
 
                 actionRow(group).padding(.top, 12)
 
+                // Plans: the next session, your answer, and what's coming up.
+                if let session = group.session {
+                    RTPlanSessionCard(group: group, session: session)
+                        .padding(.top, 22)
+                }
+
                 // Then "today's status": routine progress and the check-in.
                 if let me, let habit = myPlan {
                     RTTodayRoutineCard(groupId: group.id, habit: habit, routine: me.routine, alarm: group.alarm)

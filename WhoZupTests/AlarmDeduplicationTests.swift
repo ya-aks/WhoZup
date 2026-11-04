@@ -6,6 +6,7 @@
 //  phone rings once at 06:30 no matter how many 06:30 groups you're in.
 //
 
+import FirebaseFirestore
 import XCTest
 @testable import WhoZup
 
@@ -308,5 +309,23 @@ final class AlarmDeduplicationTests: XCTestCase {
         XCTAssertEqual(RTAlarmSync.desiredAlarms(for: [once(firing: now.addingTimeInterval(-30 * 60))], now: now),
                        ["06:30#once": ["a"]], "still wanted while it may be snoozing")
         XCTAssertTrue(RTAlarmSync.desiredAlarms(for: [once(firing: now.addingTimeInterval(-3 * 3600))], now: now).isEmpty)
+    }
+
+    /// A repeating plan's sessions fall on its days at its start time, and a
+    /// session stays "next" until two hours after it starts.
+    func testRepeatingPlanSessionsFollowItsDays() {
+        func sessions(_ count: Int, _ now: Date) -> [Date] {
+            GroupRepository.planSessions(kind: .repeating, meetAt: nil, startTime: "06:00",
+                                         alarmDays: [3, 5], alarmLeadMinutes: 30, count: count, now: now)  // Tue, Thu
+        }
+        let cal = Calendar.current
+        // Wed 4 Nov 2026, 10:00 local.
+        let now = cal.date(from: DateComponents(year: 2026, month: 11, day: 4, hour: 10))!
+        let next = sessions(3, now)
+        XCTAssertEqual(next.map { cal.component(.weekday, from: $0) }, [5, 3, 5])
+        XCTAssertEqual(next.first.map { cal.component(.hour, from: $0) }, 6)
+        // At 7:30 on a Thursday the 6:00 session is still the next one.
+        let thursday = cal.date(from: DateComponents(year: 2026, month: 11, day: 5, hour: 7, minute: 30))!
+        XCTAssertEqual(sessions(1, thursday).first.map { cal.component(.day, from: $0) }, 5)
     }
 }

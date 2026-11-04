@@ -2,7 +2,7 @@
   "name": "ringtogether-functions",
   "description": "Cloud Functions for RingTogether (alarm-change push + invite-admin grant)",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {

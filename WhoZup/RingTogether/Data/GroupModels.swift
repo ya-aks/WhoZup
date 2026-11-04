@@ -54,6 +54,29 @@ struct FirestoreGroup: Codable, Identifiable {
     /// count is authoritative and survives reload. Absent means 0.
     var reminderCount: Int?
 
+    // Plans (see docs/plans-build.md). All optional: absent on groups made
+    // before Plans, which read as their type's old behaviour.
+    /// `RTPlanKind` raw value: "once" | "onceAlarm" | "repeat".
+    var planKind: String? = nil
+    /// When a repeating plan starts, "HH:mm" (its alarm, if any, is earlier).
+    var startTime: String? = nil
+    /// When a one-time plan with a wake-up starts.
+    var meetAt: Timestamp? = nil
+    /// The one date a one-time alarm rings on, "yyyy-MM-dd" (device zone at creation).
+    var onceDate: String? = nil
+    /// How many minutes before the start everyone's alarm rings (0 = at the start).
+    var alarmLeadMinutes: Int? = nil
+    /// Repeating plans: whether everyone's alarm rings. Absent = true (old In Sync).
+    var hasAlarm: Bool? = nil
+    /// One-time alarm: flag anyone not up this many minutes after the alarm.
+    var flagNotUpMinutes: Int? = nil
+    /// Repeating plans: "in" (everyone's in unless they skip) or "ask".
+    var attendanceDefault: String? = nil
+    /// When the app asks members for a headcount, relative to the start.
+    var headcountAsks: [RTHeadcountAsk]? = nil
+    /// Repeating plans: send the host a weekly look-ahead.
+    var weeklyLookahead: Bool? = nil
+
     var groupType: RTGroupType {
         RTGroupType(rawValue: type) ?? .accountability
     }
@@ -176,5 +199,27 @@ enum RTAvatarPalette {
     static func hex(for uid: String) -> String {
         let idx = abs(uid.hashValue) % hexes.count
         return hexes[idx]
+    }
+}
+
+/// One scheduled headcount ask on a plan (`groups/{id}.headcountAsks[]`).
+struct RTHeadcountAsk: Codable, Hashable, Identifiable {
+    /// Stable id, e.g. "eveningBefore".
+    var id: String
+    /// Minutes relative to the start: negative is before it. Asks tied to a
+    /// clock time the day before carry `dayBeforeAt` instead.
+    var offsetMinutes: Int?
+    /// "HH:mm" on the day before the start, for evening/bedtime asks.
+    var dayBeforeAt: String?
+    /// "unanswered" | "yes" | "everyone".
+    var audience: String
+    /// What members see, e.g. "Still coming?".
+    var question: String
+
+    var firestoreData: [String: Any] {
+        var map: [String: Any] = ["id": id, "audience": audience, "question": question]
+        if let offsetMinutes { map["offsetMinutes"] = offsetMinutes }
+        if let dayBeforeAt { map["dayBeforeAt"] = dayBeforeAt }
+        return map
     }
 }

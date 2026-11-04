@@ -375,7 +375,12 @@ final class GroupRepository {
         let once = type == .shared ? (g.alarmOnce ?? false)
             : (type == .accountability && myDoc?.alarmOnce == true)
         let onceSetAt = (type == .accountability ? myDoc?.alarmSetAt : g.alarmSetAt)?.dateValue() ?? Date()
-        let onceFire = once && !displayAlarm.isEmpty ? Self.firstOccurrence(of: displayAlarm, after: onceSetAt) : nil
+        // A plan's one-time alarm rings on its chosen date, not "the next 06:30".
+        let onceFire: Date? = {
+            guard once, !displayAlarm.isEmpty else { return nil }
+            if let day = g.onceDate, let date = Self.date(day: day, time: displayAlarm) { return date }
+            return Self.firstOccurrence(of: displayAlarm, after: onceSetAt)
+        }()
 
         return RTGroup(
             id: gid,
@@ -394,6 +399,9 @@ final class GroupRepository {
             alarmDays: days,
             alarmOnce: once,
             alarmOnceFireDate: onceFire,
+            planKind: type == .accountability ? nil : g.planKind.flatMap(RTPlanKind.init(rawValue:)),
+            planStartTime: g.startTime,
+            planMeetAt: g.meetAt?.dateValue(),
             detailedDescription: g.detailedDescription,
             reminderCount: g.reminderCount ?? 0
         )
@@ -445,7 +453,8 @@ final class GroupRepository {
         eventEndAt: Date? = nil,
         detailedDescription: String? = nil,
         habit: MemberHabit? = nil,
-        checklist: MemberHabit? = nil
+        checklist: MemberHabit? = nil,
+        planFields: [String: Any] = [:]
     ) async -> String? {
         guard let uid = currentUid else { return nil }
         if type == .event && !canCreateEvent {
@@ -482,6 +491,7 @@ final class GroupRepository {
         if let eventAt { payload["eventAt"] = Timestamp(date: eventAt) }
         if let eventEndAt { payload["eventEndAt"] = Timestamp(date: eventEndAt) }
         if type != .event { payload["lateThresholdMinutes"] = 15 }
+        payload.merge(planFields) { _, new in new }
 
         do {
             try await groupRef.setData(payload)
@@ -1092,6 +1102,74 @@ final class GroupRepository {
     }
 
     /// The first time "HH:mm" occurs at or after `date`, in this device's zone.
+    /// "yyyy-MM-dd" + "HH:mm" in the device's zone.
+    static func date(day: String, time: String) -> Date? {
+        let d = day.split(separator: "-").compactMap { Int($0) }
+        let t = time.split(separator: ":").compactMap { Int($0) }
+        guard d.count == 3, t.count >= 2 else { return nil }
+        return Calendar.current.date(from: DateComponents(year: d[0], month: d[1], day: d[2], hour: t[0], minute: t[1]))
+    }
+
+    // MARK: - Plans
+
+    /// Creates a plan from the Plans tab. A one-time plan is an `event`; the
+    /// other two are `shared` groups whose alarm (if any) rings `alarmLeadMinutes`
+    /// minutes before the start. Plan settings ride on the group doc (see
+    /// docs/plans-build.md); headcount asks are stored now and sent by a later
+    /// Cloud Function.
+    @discardableResult
+    func createPlan(
+        kind: RTPlanKind,
+        name: String,
+        place: String,
+        start: Date,
+        days: [Int] = [],
+        hasAlarm: Bool,
+        alarmLeadMinutes: Int,
+        flagNotUpMinutes: Int?,
+        attendanceDefault: String,
+        headcountAsks: [RTHeadcountAsk],
+        weeklyLookahead: Bool
+    ) async -> String? {
+        var fields: [String: Any] = [
+            "planKind": kind.rawValue,
+            "headcountAsks": headcountAsks.map(\.firestoreData),
+        ]
+        if !place.isEmpty { fields["eventPlace"] = place }
+        switch kind {
+        case .once:
+            return await createGroup(type: .event, name: name, eventTitle: name,
+                                     eventPlace: place.isEmpty ? nil : place, eventAt: start, planFields: fields)
+        case .onceAlarm:
+            let alarmAt = start.addingTimeInterval(TimeInterval(-alarmLeadMinutes * 60))
+            fields["meetAt"] = Timestamp(date: start)
+            fields["onceDate"] = Self.dayKey(alarmAt)
+            fields["alarmLeadMinutes"] = alarmLeadMinutes
+            if let flagNotUpMinutes { fields["flagNotUpMinutes"] = flagNotUpMinutes }
+            return await createGroup(type: .shared, name: name, alarmTime: RTAlarmTime.string(from: alarmAt),
+                                     alarmOnce: true, planFields: fields)
+        case .repeating:
+            let startTime = RTAlarmTime.string(from: start)
+            fields["startTime"] = startTime
+            fields["hasAlarm"] = hasAlarm
+            fields["attendanceDefault"] = attendanceDefault
+            fields["weeklyLookahead"] = weeklyLookahead
+            guard hasAlarm else {
+                // No alarm at all: the days still say when it happens.
+                if !days.isEmpty { fields["alarmDays"] = days.sorted() }
+                return await createGroup(type: .shared, name: name, planFields: fields)
+            }
+            fields["alarmLeadMinutes"] = alarmLeadMinutes
+            // An alarm before midnight for a just-after-midnight start rings
+            // the evening before: shift the days back one.
+            let alarmAt = start.addingTimeInterval(TimeInterval(-alarmLeadMinutes * 60))
+            let crossesMidnight = !Calendar.current.isDate(alarmAt, inSameDayAs: start)
+            let alarmDays = crossesMidnight ? days.map { $0 == 1 ? 7 : $0 - 1 } : days
+            return await createGroup(type: .shared, name: name, alarmTime: RTAlarmTime.string(from: alarmAt),
+                                     alarmDays: alarmDays, alarmOnce: false, planFields: fields)
+        }
+    }
+
     private static func firstOccurrence(of time: String, after date: Date) -> Date? {
         let parts = time.split(separator: ":")
         guard let hour = parts.first.flatMap({ Int($0) }) else { return nil }

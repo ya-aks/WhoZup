@@ -12,6 +12,14 @@ import SwiftUI
 
 struct RTCreateGroupSheet: View {
     let type: RTGroupType
+    /// Set when created from the Plans tab: fixes once/repeat and the copy.
+    var planKind: RTPlanKind? = nil
+
+    init(type: RTGroupType, planKind: RTPlanKind? = nil) {
+        self.type = type
+        self.planKind = planKind
+        _repeats = State(initialValue: planKind.map(\.repeats) ?? true)
+    }
 
     @Environment(GroupRepository.self) private var repository
     @Environment(\.dismiss) private var dismiss
@@ -48,15 +56,19 @@ struct RTCreateGroupSheet: View {
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(RT.inkMuted)
                     Spacer()
-                    RTBadge(text: badgeLabel, color: type.eyebrow, background: type.badgeBackground)
+                    if let planKind {
+                        RTBadge(text: planKind.badge, color: planKind.tint, background: planKind.tintBackground)
+                    } else {
+                        RTBadge(text: badgeLabel, color: type.eyebrow, background: type.badgeBackground)
+                    }
                 }
 
-                Text("New group")
+                Text(planKind.map { "New \($0.badge.lowercased())" } ?? "New group")
                     .font(.rtDisplay(28, .bold))
                     .foregroundStyle(RT.ink)
                     .padding(.top, 20)
 
-                Text(type.blurb)
+                Text(planKind?.blurb ?? type.blurb)
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(RT.inkMuted)
                     .padding(.top, 4)
@@ -69,14 +81,17 @@ struct RTCreateGroupSheet: View {
 
                 switch type {
                 case .accountability, .shared:
-                    fieldLabel(type == .accountability ? "Your alarm time" : "Group alarm time")
+                    fieldLabel(type == .accountability ? "Your alarm time" : "Everyone's alarm rings at")
                     wheelTime($alarmTime)
-                    fieldLabel("Schedule")
-                    Picker("Schedule", selection: $repeats.animation()) {
-                        Text("Once").tag(false)
-                        Text("Repeat").tag(true)
+                    // A plan kind already fixes once vs repeat.
+                    if planKind == nil {
+                        fieldLabel("Schedule")
+                        Picker("Schedule", selection: $repeats.animation()) {
+                            Text("Once").tag(false)
+                            Text("Repeat").tag(true)
+                        }
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
                     if repeats {
                         fieldLabel("Repeat")
                         RTWeekdayRow(selected: $selectedDays, accent: type.accent, badgeBackground: type.badgeBackground)

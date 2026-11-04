@@ -11,7 +11,7 @@ import FirebaseAuth
 import SwiftUI
 
 enum RTTab: String, CaseIterable {
-    case accountability, shared, events, more
+    case accountability, plans, more
 }
 
 struct RTRootView: View {
@@ -35,10 +35,8 @@ struct RTRootView: View {
                 switch tab {
                 case .accountability:
                     RTGroupListView(type: .accountability)
-                case .shared:
-                    RTGroupListView(type: .shared)
-                case .events:
-                    RTGroupListView(type: .event)
+                case .plans:
+                    RTGroupListView(type: .event, plans: true)
                 case .more:
                     RTProfileView(onLeaveTip: { showTipSheet = true })
                 }
@@ -142,8 +140,7 @@ struct RTRootView: View {
         guard let id = pendingGroup.groupId, let group = repository.group(id: id) else { return }
         switch group.type {
         case .accountability: tab = .accountability
-        case .shared: tab = .shared
-        case .event: tab = .events
+        case .shared, .event: tab = .plans
         }
     }
 }
@@ -178,8 +175,7 @@ struct RTTabBar: View {
     var body: some View {
         HStack {
             tabItem(.accountability, "Alarms")
-            tabItem(.shared, "In Sync")
-            tabItem(.events, "Events")
+            tabItem(.plans, "Plans")
             tabItem(.more, "More")
         }
         .padding(.horizontal, 8)
@@ -212,8 +208,7 @@ struct RTTabBar: View {
     private func activeColor(_ tab: RTTab) -> Color {
         switch tab {
         case .accountability: return RTGroupType.accountability.accent
-        case .shared: return RTGroupType.shared.accent
-        case .events: return RTGroupType.event.accent
+        case .plans: return RTGroupType.event.accent
         case .more: return RT.ink
         }
     }
@@ -230,8 +225,7 @@ struct RTTabBar: View {
     private func assetName(_ tab: RTTab) -> String {
         switch tab {
         case .accountability: return "tab-accountability"
-        case .shared: return "tab-shared"
-        case .events: return "tab-events"
+        case .plans: return "tab-events"
         case .more: return "tab-more"
         }
     }

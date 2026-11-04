@@ -257,6 +257,12 @@ struct RTGroup: Identifiable {
     /// For a single alarm, when it rings (or rang): the first occurrence of the
     /// time after it was set. Nil for a repeating alarm.
     let alarmOnceFireDate: Date?
+    /// Set on groups made from the Plans tab.
+    var planKind: RTPlanKind? = nil
+    /// Repeating plan: when it starts, "HH:mm" (the alarm may ring earlier).
+    var planStartTime: String? = nil
+    /// One-time plan with an alarm: when it starts.
+    var planMeetAt: Date? = nil
     let detailedDescription: String?
     /// Admin nudges already sent for this event; gates the max-2 reminder cap.
     let reminderCount: Int
@@ -278,12 +284,18 @@ struct RTGroup: Identifiable {
         alarmDays: [Int] = [],
         alarmOnce: Bool = false,
         alarmOnceFireDate: Date? = nil,
+        planKind: RTPlanKind? = nil,
+        planStartTime: String? = nil,
+        planMeetAt: Date? = nil,
         detailedDescription: String? = nil,
         reminderCount: Int = 0
     ) {
         self.reminderCount = reminderCount
         self.alarmOnce = alarmOnce
         self.alarmOnceFireDate = alarmOnceFireDate
+        self.planKind = planKind
+        self.planStartTime = planStartTime
+        self.planMeetAt = planMeetAt
         self.detailedDescription = detailedDescription
         self.alarmAnchor = alarmAnchor
         self.id = id

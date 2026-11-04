@@ -13,6 +13,9 @@ import SwiftUI
 
 struct RTGroupListView: View {
     let type: RTGroupType
+    /// The Plans tab: In Sync (`shared`) and Events (`event`) groups together,
+    /// created through the plan-kind picker.
+    var plans = false
 
     @Environment(GroupRepository.self) private var repository
     @Environment(PendingGroupStore.self) private var pendingGroup
@@ -29,15 +32,24 @@ struct RTGroupListView: View {
     @State private var pushedGroupId: String?
     /// Events tab: show active (running/upcoming) or completed events.
     @State private var eventFilter: RTEventFilter = .active
+    @State private var showKindPicker = false
+    /// The plan kind picked for the create form (Plans tab).
+    @State private var createKind: RTPlanKind?
 
-    private var groups: [RTGroup] { repository.groups(of: type) }
+    private var groups: [RTGroup] {
+        plans ? repository.groups(of: .shared) + repository.groups(of: .event) : repository.groups(of: type)
+    }
 
-    /// The events tab splits by completion so unfinished events stay front and
-    /// centre; other tabs show everything.
+    /// The accent of this list: the Plans tab uses the events orange.
+    private var accent: Color { plans ? RTGroupType.event.accent : type.accent }
+
+    /// Events and Plans split by completion so what's still ahead stays front
+    /// and centre; other tabs show everything. A plan is past once its event
+    /// ended or its one-time alarm has rung.
     private var displayedGroups: [RTGroup] {
-        guard type == .event else { return groups }
+        guard plans || type == .event else { return groups }
         return groups.filter { group in
-            let completed = group.event?.isCompleted ?? false
+            let completed = group.event?.isCompleted ?? RTAlarmSync.onceIsOver(group)
             return eventFilter == .completed ? completed : !completed
         }
     }
@@ -47,7 +59,14 @@ struct RTGroupListView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .top) {
-                        RTEyebrow(type: type)
+                        if plans {
+                            Text("PLANS")
+                                .font(.system(size: 13, weight: .bold))
+                                .tracking(0.4)
+                                .foregroundStyle(RTGroupType.event.eyebrow)
+                        } else {
+                            RTEyebrow(type: type)
+                        }
                         Spacer()
                         Button {
                             showHelp = true
@@ -57,21 +76,21 @@ struct RTGroupListView: View {
                                 Text("How it works")
                             }
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(type.accent)
+                            .foregroundStyle(accent)
                         }
                     }
 
-                    Text(type.listTitle)
+                    Text(plans ? "Plans" : type.listTitle)
                         .font(.rtDisplay(28, .bold))
                         .foregroundStyle(RT.ink)
                         .padding(.top, 8)
 
-                    Text(type.listSubtitle)
+                    Text(plans ? "Shared times, one-off or every week. See who's coming and who's up." : type.listSubtitle)
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(RT.inkMuted)
                         .padding(.top, 4)
 
-                    if type == .event {
+                    if plans || type == .event {
                         RTFreeEventsBanner(remaining: repository.eventsRemaining) {
                             // Buying from the banner offers the same choice —
                             // event pack or the lifetime unlock — via the paywall.
@@ -81,8 +100,8 @@ struct RTGroupListView: View {
                         .padding(.top, 16)
 
                         Picker("", selection: $eventFilter) {
-                            Text("Active").tag(RTEventFilter.active)
-                            Text("Completed").tag(RTEventFilter.completed)
+                            Text(plans ? "Upcoming" : "Active").tag(RTEventFilter.active)
+                            Text(plans ? "Past" : "Completed").tag(RTEventFilter.completed)
                         }
                         .pickerStyle(.segmented)
                         .padding(.top, 14)
@@ -90,7 +109,7 @@ struct RTGroupListView: View {
 
                     VStack(spacing: 14) {
                         if displayedGroups.isEmpty {
-                            RTEmptyState(type: type)
+                            RTEmptyState(type: type, plans: plans)
                                 .padding(.top, 8)
                         }
 
@@ -119,8 +138,8 @@ struct RTGroupListView: View {
             // Programmatic push for a notification tap (card taps use their own
             // NavigationLink). Only the list whose type matches acts on it.
             .navigationDestination(item: $pushedGroupId) { id in
-                // Only this list's type ever pushes (see tryOpen), so route by it.
-                if type == .event {
+                // Only this list's types ever push (see tryOpen), so route by type.
+                if repository.group(id: id)?.type == .event {
                     RTEventDetailView(groupId: id)
                 } else {
                     RTGroupDetailView(groupId: id)
@@ -136,6 +155,11 @@ struct RTGroupListView: View {
                         // Top option: "New group" (appears second with slight delay)
                         Button {
                             withAnimation { showFabMenu = false }
+                            // Plans: pick the kind first.
+                            if plans {
+                                showKindPicker = true
+                                return
+                            }
                             // Paywall gate: creating an event over the free limit
                             // shows the purchase options instead of the form.
                             if type == .event && !repository.canCreateEvent {
@@ -148,7 +172,7 @@ struct RTGroupListView: View {
                             HStack(spacing: 8) {
                                 Image(systemName: "sparkles")
                                     .font(.system(size: 14, weight: .bold))
-                                Text("New group")
+                                Text(plans ? "New plan" : "New group")
                                     .font(.system(size: 14, weight: .bold))
                             }
                             .foregroundStyle(RT.ink)
@@ -194,8 +218,8 @@ struct RTGroupListView: View {
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(.white)
                             .frame(width: 58, height: 58)
-                            .background(Circle().fill(type.accent))
-                            .shadow(color: type.accent.opacity(0.35), radius: 12, y: 6)
+                            .background(Circle().fill(accent))
+                            .shadow(color: accent.opacity(0.35), radius: 12, y: 6)
                             .rotationEffect(.degrees(showFabMenu ? 90 : 0))
                     }
                 }
@@ -204,13 +228,30 @@ struct RTGroupListView: View {
             }
         }
         .sheet(isPresented: $showCreate) {
-            RTCreateGroupSheet(type: type)
+            if plans, let createKind {
+                RTCreatePlanSheet(kind: createKind)
+            } else {
+                RTCreateGroupSheet(type: type)
+            }
+        }
+        .sheet(isPresented: $showKindPicker) {
+            RTPlanKindSheet { kind in
+                createKind = kind
+                // A get-together is an event: over the free limit, the paywall first.
+                if kind == .once && !repository.canCreateEvent {
+                    paywallOpensCreate = true
+                    showPaywall = true
+                } else {
+                    showCreate = true
+                }
+            }
+            .presentationDetents([.large])
         }
         .sheet(isPresented: $showJoin) {
             RTJoinGroupSheet()
         }
         .sheet(isPresented: $showHelp) {
-            RTHowItWorksSheet(type: type)
+            RTHowItWorksSheet(type: plans ? .event : type)
         }
         .sheet(isPresented: $showPaywall) {
             RTEventPaywallSheet(
@@ -238,7 +279,8 @@ struct RTGroupListView: View {
     /// Push the pending group's detail if it belongs to this list's type, then
     /// clear the store so it fires once.
     private func tryOpen(_ id: String?) {
-        guard let id, let group = repository.group(id: id), group.type == type else { return }
+        guard let id, let group = repository.group(id: id),
+              plans ? group.type != .accountability : group.type == type else { return }
         pushedGroupId = id
         pendingGroup.groupId = nil
     }
@@ -343,8 +385,10 @@ struct RTPressStyle: ButtonStyle {
 /// Shown when a tab has no groups yet.
 struct RTEmptyState: View {
     let type: RTGroupType
+    var plans = false
 
     private var message: String {
+        if plans { return "No plans yet. Tap ＋ for a one-time or repeating plan." }
         switch type {
         case .accountability: return "No alarm groups yet. Create one and invite friends to keep each other on time."
         case .shared: return "No In Sync groups yet. Create one common alarm for the whole crew."

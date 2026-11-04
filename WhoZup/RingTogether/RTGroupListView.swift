@@ -58,12 +58,11 @@ struct RTGroupListView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(alignment: .top) {
-                        if plans {
-                            Text("PLANS")
-                                .font(.system(size: 13, weight: .bold))
-                                .tracking(0.4)
-                                .foregroundStyle(RTGroupType.event.eyebrow)
+                    HStack(alignment: .center) {
+                        if plans || type == .accountability {
+                            Text(plans ? "Plans" : "Alarms")
+                                .font(.rtDisplay(30, .heavy))
+                                .foregroundStyle(RT.ink)
                         } else {
                             RTEyebrow(type: type)
                         }
@@ -80,17 +79,21 @@ struct RTGroupListView: View {
                         }
                     }
 
-                    Text(plans ? "Plans" : type.listTitle)
-                        .font(.rtDisplay(28, .bold))
-                        .foregroundStyle(RT.ink)
-                        .padding(.top, 8)
+                    if !plans && type != .accountability {
+                        Text(type.listTitle)
+                            .font(.rtDisplay(28, .bold))
+                            .foregroundStyle(RT.ink)
+                            .padding(.top, 8)
+                    }
 
-                    Text(plans ? "Shared times, one-off or every week. See who's coming and who's up." : type.listSubtitle)
+                    Text(plans ? "Shared times, one-off or every week. See who's coming and who's up."
+                         : type == .accountability ? "Your own alarm. Your group sees whether you got up." : type.listSubtitle)
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(RT.inkMuted)
                         .padding(.top, 4)
 
-                    if plans || type == .event {
+                    // Plans: no purchase banner for now (pricing is being reworked).
+                    if !plans && type == .event {
                         RTFreeEventsBanner(remaining: repository.eventsRemaining) {
                             // Buying from the banner offers the same choice —
                             // event pack or the lifetime unlock — via the paywall.
@@ -98,7 +101,9 @@ struct RTGroupListView: View {
                             showPaywall = true
                         }
                         .padding(.top, 16)
+                    }
 
+                    if plans || type == .event {
                         Picker("", selection: $eventFilter) {
                             Text(plans ? "Upcoming" : "Active").tag(RTEventFilter.active)
                             Text(plans ? "Past" : "Completed").tag(RTEventFilter.completed)
@@ -118,7 +123,11 @@ struct RTGroupListView: View {
                                 NavigationLink {
                                     destination(for: group)
                                 } label: {
-                                    RTGroupCard(group: group)
+                                    if group.type == .accountability {
+                                        RTAlarmGroupCard(group: group)
+                                    } else {
+                                        RTGroupCard(group: group)
+                                    }
                                 }
                                 .buttonStyle(RTPressStyle())
 
@@ -129,6 +138,16 @@ struct RTGroupListView: View {
                         }
                     }
                     .padding(.top, 18)
+
+                    if type == .accountability && !plans {
+                        (Text("Waking up together for something? That's a ") + Text("Plan").bold().foregroundColor(Color(hex: "#9a5d1c")) + Text(" with its alarm on."))
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(RT.inkMuted)
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 14).stroke(style: StrokeStyle(lineWidth: 1, dash: [5, 4])).foregroundStyle(RT.dotIdle))
+                            .padding(.top, 14)
+                    }
                 }
                 .padding(20)
                 .padding(.bottom, 110)
@@ -237,13 +256,8 @@ struct RTGroupListView: View {
         .sheet(isPresented: $showKindPicker) {
             RTPlanKindSheet { kind in
                 createKind = kind
-                // A get-together is an event: over the free limit, the paywall first.
-                if kind == .once && !repository.canCreateEvent {
-                    paywallOpensCreate = true
-                    showPaywall = true
-                } else {
-                    showCreate = true
-                }
+                // No event paywall on Plans for now (pricing is being reworked).
+                showCreate = true
             }
             .presentationDetents([.large])
         }
@@ -251,7 +265,7 @@ struct RTGroupListView: View {
             RTJoinGroupSheet()
         }
         .sheet(isPresented: $showHelp) {
-            RTHowItWorksSheet(type: plans ? .event : type)
+            RTHowItWorksSheet(type: type, plans: plans)
         }
         .sheet(isPresented: $showPaywall) {
             RTEventPaywallSheet(

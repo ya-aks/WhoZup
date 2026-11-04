@@ -12,13 +12,17 @@ import SwiftUI
 
 struct RTHowItWorksSheet: View {
     let type: RTGroupType
+    /// The Plans tab's walkthrough (In Sync and Events together).
+    var plans = false
 
     @Environment(\.dismiss) private var dismiss
     @State private var page = 0
 
     private var steps: [RTWalkStep] {
-        RTWalkStep.steps(for: type)
+        plans ? RTWalkStep.planSteps : RTWalkStep.steps(for: type)
     }
+
+    private var accent: Color { plans ? Color(hex: "#9a5d1c") : type.accent }
 
     var body: some View {
         NavigationStack {
@@ -43,13 +47,13 @@ struct RTHowItWorksSheet: View {
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 15)
-                        .background(RoundedRectangle(cornerRadius: 16).fill(type.accent))
+                        .background(RoundedRectangle(cornerRadius: 16).fill(accent))
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
             }
             .background(RT.canvas)
-            .navigationTitle(type == .accountability ? "How Alarms work" : "How \(type.helpTitle) works")
+            .navigationTitle(plans ? "How Plans work" : type == .accountability ? "How Alarms work" : "How \(type.helpTitle) works")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -67,27 +71,49 @@ struct RTWalkStep: Identifiable {
     let caption: String
     let screenType: RTMockScreenType
 
+    /// The Plans tab: one-off and repeating plans, with an optional alarm.
+    static let planSteps: [RTWalkStep] = [
+        .init(id: 0, title: "Pick how it runs",
+              caption: "A one-time plan, a one-time plan with an alarm, or a repeating plan. Each has its own short form.",
+              screenType: .planKinds),
+        .init(id: 1, title: "Everyone answers",
+              caption: "For each session: In, Running late with an ETA, or Skip. A repeating plan can count everyone as In unless they skip.",
+              screenType: .planAnswer),
+        .init(id: 2, title: "Skip ahead, stay quiet",
+              caption: "Skip a date and your alarm stays quiet that day. A skip never counts as missed.",
+              screenType: .planSkip),
+        .init(id: 3, title: "Headcount, asked for you",
+              caption: "The host picks when to ask. We ask the right people at those moments, and the host can Ask now any time.",
+              screenType: .planHeadcount),
+        .init(id: 4, title: "With an alarm: who's up",
+              caption: "Everyone's phone rings before it starts. See who's up, and nudge anyone who isn't.",
+              screenType: .planMorning),
+        .init(id: 5, title: "Who shows up",
+              caption: "Rise Report counts the sessions people actually made it to. Skipping ahead never counts against you.",
+              screenType: .streak(.shared)),
+    ]
+
     static func steps(for type: RTGroupType) -> [RTWalkStep] {
         switch type {
         case .accountability:
             return [
                 .init(id: 0, title: "Set your alarm",
-                      caption: "Pick an alarm time and repeat days — or set a one-time alarm. This is your personal alarm time.",
+                      caption: "Your own alarm: repeat it on chosen days, or let it ring once. Only you can change it; your group sees how you did.",
                       screenType: .alarm(.accountability)),
-                .init(id: 1, title: "Add a habit (optional)",
-                      caption: "Attach up to 3 steps to your wake-up, each with an optional tiny version, and give yourself 1–59 minutes to finish. Habits are yours alone.",
+                .init(id: 1, title: "Add a habit or a checklist",
+                      caption: "Optional. On a repeating alarm, a habit of up to 3 steps (each with a tiny version). On a one-time alarm, a checklist of up to 5 things to get done.",
                       screenType: .habit),
-                .init(id: 2, title: "Stop it on the first ring",
-                      caption: "It rings locally on your device, even when locked. Stop it on time and your routine starts; snooze or run late and that day has no routine.",
+                .init(id: 2, title: "Stop it when it rings",
+                      caption: "It rings on your phone, even when locked. A habit opens after an on-time first-ring Stop; a checklist opens after any Stop.",
                       screenType: .ring(.accountability)),
-                .init(id: 3, title: "Work through your routine",
-                      caption: "Steps go in order: mark each one Done or Did tiny version, right from the lock screen. Leave it and a reminder keeps it waiting.",
+                .init(id: 3, title: "Work through it",
+                      caption: "Go in order and tick each one off, right from the lock screen. It closes itself when you're done or your time runs out.",
                       screenType: .routine),
-                .init(id: 4, title: "Your group sees it — live",
-                      caption: "Woke up, snoozed, or went silent, plus how many routine steps you've done. Step names stay private unless you share them.",
+                .init(id: 4, title: "Your group sees it, live",
+                      caption: "Woke up, snoozed, or no response, plus how many steps you've done. Step names stay private unless you share them.",
                       screenType: .roster(.accountability)),
                 .init(id: 5, title: "Build your streak",
-                      caption: "Every on-time alarm adds to your streak. In Rise Report, woke-up days split into your routine steps.",
+                      caption: "Every on-time alarm adds to your streak. In Rise Report, woke-up days split into your steps, and missed ones show in soft red.",
                       screenType: .streak(.accountability))
             ]
         case .shared:
@@ -131,6 +157,11 @@ enum RTMockScreenType {
     case streak(RTGroupType)
     case habit
     case routine
+    case planKinds
+    case planAnswer
+    case planSkip
+    case planHeadcount
+    case planMorning
     case eventDetail
     case eventRespond
     case eventRoster
@@ -196,6 +227,16 @@ extension RTMockScreen where Content == AnyView {
             self.content = AnyView(RTMockHabit())
         case .routine:
             self.content = AnyView(RTMockRoutine())
+        case .planKinds:
+            self.content = AnyView(RTMockPlanKinds())
+        case .planAnswer:
+            self.content = AnyView(RTMockPlanAnswer())
+        case .planSkip:
+            self.content = AnyView(RTMockPlanSkip())
+        case .planHeadcount:
+            self.content = AnyView(RTMockPlanHeadcount())
+        case .planMorning:
+            self.content = AnyView(RTMockPlanMorning())
         case .eventDetail:
             self.content = AnyView(RTMockEventDetail())
         case .eventRespond:
@@ -550,5 +591,170 @@ private struct RTMockEventReminder: View {
                 .background(Capsule().fill(RTGroupType.event.accent))
         }
         .padding(.vertical, 20)
+    }
+}
+
+// MARK: - Plans mocks
+
+private let planBrown = Color(hex: "#9a5d1c")
+
+private func mockChip(_ text: String, _ fg: Color, _ bg: Color) -> some View {
+    Text(text)
+        .font(.system(size: 11, weight: .bold))
+        .foregroundStyle(fg)
+        .padding(.horizontal, 9).padding(.vertical, 4)
+        .background(Capsule().fill(bg))
+}
+
+/// The three plan kinds.
+private struct RTMockPlanKinds: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(RTPlanKind.allCases) { kind in
+                HStack(spacing: 12) {
+                    Image(systemName: kind.symbol)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(kind.tint)
+                        .frame(width: 38, height: 38)
+                        .background(RoundedRectangle(cornerRadius: 11).fill(kind.tintBackground))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(kind.title).font(.system(size: 14, weight: .bold)).foregroundStyle(RT.ink)
+                        Text(kind.tagline).font(.system(size: 10, weight: .bold)).foregroundStyle(kind.tint)
+                    }
+                    Spacer()
+                }
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 14).fill(RT.canvas))
+            }
+        }
+        .padding(18)
+    }
+}
+
+/// Your answer for a session, and everyone else's.
+private struct RTMockPlanAnswer: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("NEXT SESSION · THU 6:00 AM").font(.system(size: 11, weight: .bold)).tracking(0.5).foregroundStyle(RT.inkMuted)
+            HStack(spacing: 6) {
+                ForEach(["I'm in", "Running late", "Skip this one"], id: \.self) { label in
+                    Text(label)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(label == "I'm in" ? .white : RT.ink)
+                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(label == "I'm in" ? planBrown : RT.canvas))
+                }
+            }
+            row("PY", "#5b8bb5", "Priya", mockChip("In", RT.dotOnTime, Color(hex: "#e3f3ec")))
+            row("SA", "#b57f5b", "Sam", mockChip("Late +15", Color(hex: "#9a6410"), Color(hex: "#fbeed6")))
+            row("GA", "#7b6bb5", "Gaurav", mockChip("Skipping", RT.inkSecondary, RT.cardBorder))
+        }
+        .padding(18)
+    }
+
+    private func row(_ initials: String, _ hex: String, _ name: String, _ chip: some View) -> some View {
+        HStack(spacing: 10) {
+            RTAvatar(initials: initials, color: Color(hex: hex), size: 28)
+            Text(name).font(.system(size: 14, weight: .semibold)).foregroundStyle(RT.ink)
+            Spacer()
+            chip
+        }
+    }
+}
+
+/// The coming-up strip with a skipped date.
+private struct RTMockPlanSkip: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("COMING UP").font(.system(size: 11, weight: .bold)).tracking(0.5).foregroundStyle(RT.inkMuted)
+            HStack(spacing: 8) {
+                day("THU", "5", skip: false)
+                day("SAT", "7", skip: true)
+                day("TUE", "10", skip: false)
+                day("THU", "12", skip: false)
+            }
+            HStack(spacing: 8) {
+                Image(systemName: "bell.slash.fill").foregroundStyle(Color(hex: "#2f7d72"))
+                Text("Your alarm stays quiet Sat 7.").font(.system(size: 13, weight: .semibold)).foregroundStyle(Color(hex: "#24524b"))
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(hex: "#e3f1ee")))
+        }
+        .padding(18)
+    }
+
+    private func day(_ weekday: String, _ date: String, skip: Bool) -> some View {
+        VStack(spacing: 5) {
+            Text(weekday).font(.system(size: 11, weight: .bold)).foregroundStyle(RT.inkMuted)
+            Text(date).font(.system(size: 17, weight: .heavy)).foregroundStyle(RT.ink)
+            mockChip(skip ? "Skip" : "In", skip ? RT.inkSecondary : RT.dotOnTime, skip ? RT.cardBorder : Color(hex: "#e3f3ec"))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 12).fill(RT.canvas))
+    }
+}
+
+/// The host's headcount.
+private struct RTMockPlanHeadcount: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .lastTextBaseline, spacing: 6) {
+                Text("38").font(.rtDisplay(40, .heavy)).foregroundStyle(RT.ink)
+                Text("of 60 coming").font(.system(size: 14, weight: .semibold)).foregroundStyle(RT.inkMuted)
+            }
+            GeometryReader { geo in
+                HStack(spacing: 2) {
+                    Rectangle().fill(RT.dotOnTime).frame(width: geo.size.width * 0.58)
+                    Rectangle().fill(Color(hex: "#d98c3a")).frame(width: geo.size.width * 0.07)
+                    Rectangle().fill(Color(hex: "#b9b2a5")).frame(width: geo.size.width * 0.12)
+                    Rectangle().fill(Color(hex: "#e6dfd0"))
+                }
+            }
+            .frame(height: 10)
+            .clipShape(Capsule())
+            Text("Fri 5:00 PM · Still coming? to everyone who said yes")
+                .font(.system(size: 12, weight: .medium)).foregroundStyle(RT.inkMuted)
+            Label("Ask now", systemImage: "paperplane.fill")
+                .font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                .frame(maxWidth: .infinity, minHeight: 42)
+                .background(RoundedRectangle(cornerRadius: 12).fill(planBrown))
+        }
+        .padding(18)
+    }
+}
+
+/// The morning of a plan with an alarm.
+private struct RTMockPlanMorning: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .lastTextBaseline, spacing: 6) {
+                Text("6").font(.rtDisplay(40, .heavy)).foregroundStyle(RT.ink)
+                Text("of 7 are up").font(.system(size: 14, weight: .semibold)).foregroundStyle(RT.inkMuted)
+            }
+            GeometryReader { geo in
+                HStack(spacing: 2) {
+                    Rectangle().fill(RT.dotOnTime).frame(width: geo.size.width * 0.85)
+                    Rectangle().fill(RT.dotLate)
+                }
+            }
+            .frame(height: 10)
+            .clipShape(Capsule())
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Gaurav isn't up").font(.system(size: 14, weight: .bold)).foregroundStyle(Color(hex: "#7c2d20"))
+                    Text("No answer since the alarm.").font(.system(size: 12, weight: .medium)).foregroundStyle(Color(hex: "#7c2d20"))
+                }
+                Spacer()
+                Text("Nudge")
+                    .font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(Capsule().fill(Color(hex: "#a83f2e")))
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(hex: "#f7e0da")))
+        }
+        .padding(18)
     }
 }

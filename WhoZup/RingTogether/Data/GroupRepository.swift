@@ -591,7 +591,8 @@ final class GroupRepository {
         planFields: [String: Any] = [:]
     ) async -> String? {
         guard let uid = currentUid else { return nil }
-        if type == .event && !canCreateEvent {
+        // Plans skip the free-event limit for now (pricing is being reworked).
+        if type == .event && planFields.isEmpty && !canCreateEvent {
             lastError = "Free event limit reached (5/5). Please purchase an Event Pack (+20 events for $10) to create more events."
             return nil
         }

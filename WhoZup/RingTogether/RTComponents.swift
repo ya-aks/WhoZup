@@ -143,6 +143,79 @@ struct RTGroupCard: View {
     }
 }
 
+/// An Alarms (Check-ins) group on the Alarms tab: when your alarm rings, your
+/// habit or checklist, the group's name and your alarm time, and how the
+/// group did today.
+struct RTAlarmGroupCard: View {
+    let group: RTGroup
+
+    private var me: RTMember? { group.roster.first { $0.isYou } }
+    private var plan: MemberHabit? { group.alarmOnce ? me?.checklist : me?.habit }
+
+    private var whenLabel: String {
+        if group.alarmOnce {
+            guard let fire = group.alarmOnceFireDate else { return "ONCE" }
+            return "ONCE · " + fire.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()).uppercased()
+        }
+        return RTWeekday.summary(group.alarmDays).uppercased()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(whenLabel)
+                    .font(.system(size: 11, weight: .heavy)).tracking(0.5)
+                    .foregroundStyle(RTGroupType.accountability.eyebrow)
+                Spacer()
+                if let plan {
+                    Text(plan.checklist ? "Checklist · \(plan.steps.count) item\(plan.steps.count == 1 ? "" : "s")" : "Habit · \(plan.name)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(RT.dotOnTime)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Capsule().fill(Color(hex: "#e3f3ec")))
+                }
+            }
+            HStack(alignment: .firstTextBaseline) {
+                Text(group.name)
+                    .font(.rtDisplay(19, .bold))
+                    .foregroundStyle(RT.ink)
+                    .lineLimit(2)
+                Spacer(minLength: 8)
+                if !group.alarm.isEmpty {
+                    let parts = group.alarmDisplay.split(separator: " ")
+                    HStack(alignment: .firstTextBaseline, spacing: 3) {
+                        Text(parts.first.map(String.init) ?? group.alarmDisplay)
+                            .font(.rtDisplay(26, .heavy)).foregroundStyle(RT.ink)
+                        if parts.count > 1 {
+                            Text(String(parts[1])).font(.system(size: 13, weight: .bold)).foregroundStyle(RT.inkMuted)
+                        }
+                    }
+                }
+            }
+            RTRoutinePendingPill(group: group)
+            Text(statusLine)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(RT.inkMuted)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18).fill(RT.card))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(RT.cardBorder, lineWidth: 1))
+    }
+
+    /// "3 up · 1 snoozed · 1 no response", or who's in it before anyone's rung.
+    private var statusLine: String {
+        let up = group.roster.filter { $0.status == .wokeUp || $0.status == .runningLate }.count
+        let snoozed = group.roster.filter { $0.status == .snoozed }.count
+        let silent = group.roster.filter { $0.status == .silentLate }.count
+        var parts: [String] = []
+        if up > 0 { parts.append("\(up) up") }
+        if snoozed > 0 { parts.append("\(snoozed) snoozed") }
+        if silent > 0 { parts.append("\(silent) no response") }
+        return parts.isEmpty ? group.memberLabel : parts.joined(separator: " · ")
+    }
+}
 
 /// "Routine pending · 2 of 3" on a group's list card while your routine there
 /// is still open, so there's always a visible reminder that something's left.

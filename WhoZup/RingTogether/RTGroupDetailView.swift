@@ -159,6 +159,14 @@ struct RTGroupDetailView: View {
 
                 actionRow(group).padding(.top, 12)
 
+                // Plans: the host's headcount for the next session.
+                if let session = group.session, group.isCurrentUserAdmin {
+                    RTHeadcountCard(groupId: group.id, headcount: RTHeadcount(group: group, session: session),
+                                    asks: group.planAsks, start: session.start, sessionKey: session.dayKey,
+                                    cantLabel: "Skipping")
+                        .padding(.top, 22)
+                }
+
                 // Plans: the next session, your answer, and what's coming up.
                 if let session = group.session {
                     RTPlanSessionCard(group: group, session: session)

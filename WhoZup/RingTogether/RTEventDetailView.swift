@@ -200,6 +200,13 @@ struct RTEventDetailView: View {
 
                 eventCard(group).padding(.top, 16)
 
+                // Plans: the host's headcount for a one-time plan.
+                if !isCompleted, group.planKind == .once, group.isCurrentUserAdmin, let start = group.event?.date {
+                    RTHeadcountCard(groupId: group.id, headcount: RTHeadcount(eventRoster: group.roster),
+                                    asks: group.planAsks, start: start, sessionKey: GroupRepository.dayKey(start))
+                        .padding(.top, 16)
+                }
+
                 if isCompleted {
                     Label("This event has ended. Responses are closed.", systemImage: "checkmark.seal.fill")
                         .font(.system(size: 13, weight: .semibold))

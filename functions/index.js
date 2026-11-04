@@ -309,3 +309,8 @@ exports.applyInviteAdminOnJoin = onDocumentCreated(
     }
   }
 );
+
+// Plans: headcount asks (scheduled + Ask now). Required after initializeApp().
+const headcount = require("./headcount");
+exports.headcountScheduler = headcount.headcountScheduler;
+exports.headcountAskNow = headcount.headcountAskNow;

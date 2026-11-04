@@ -109,8 +109,20 @@ final class AppFCM: NSObject, MessagingDelegate, UNUserNotificationCenterDelegat
             intentIdentifiers: [],
             options: []
         )
+        // Plans: a host's headcount ask, answerable from the notification.
+        let headcountCategory = UNNotificationCategory(
+            identifier: "HEADCOUNT_CATEGORY",
+            actions: [
+                UNNotificationAction(identifier: "HC_COMING", title: "Coming", options: []),
+                UNNotificationAction(identifier: "HC_LATE", title: "Running late", options: []),
+                UNNotificationAction(identifier: "HC_SKIP", title: "Can't make it", options: [.destructive]),
+            ],
+            intentIdentifiers: [],
+            options: []
+        )
         UNUserNotificationCenter.current().setNotificationCategories([
             eventCategory,
+            headcountCategory,
             AlarmCheckInNotifier.category,
         ])
     }
@@ -175,10 +187,33 @@ final class AppFCM: NSObject, MessagingDelegate, UNUserNotificationCenterDelegat
             return
         }
 
-        let actionIdentifier = response.actionIdentifier
+        var actionIdentifier = response.actionIdentifier
         let userInfo = response.notification.request.content.userInfo
 
         guard let groupId = userInfo["groupId"] as? String else { return }
+
+        // Plans: a headcount ask. A one-time plan is an event, so its answers
+        // take the RSVP path below; a plan with sessions answers that session.
+        if response.notification.request.content.categoryIdentifier == "HEADCOUNT_CATEGORY",
+           actionIdentifier.hasPrefix("HC_") {
+            if userInfo["planKind"] as? String == "once" {
+                actionIdentifier = ["HC_COMING": "COMING_ACTION", "HC_LATE": "LATE_15_ACTION", "HC_SKIP": "CANT_ACTION"][actionIdentifier] ?? ""
+            } else {
+                guard let sessionKey = userInfo["sessionKey"] as? String,
+                      let uid = Auth.auth().currentUser?.uid else { return }
+                let answer = actionIdentifier == "HC_COMING" ? "coming" : actionIdentifier == "HC_LATE" ? "running_late" : "skipping"
+                let group = Firestore.firestore().collection("groups").document(groupId)
+                group.collection("sessions").document(sessionKey).collection("responses").document(uid).setData([
+                    "status": answer, "eta": answer == "running_late" ? "+15" : NSNull(),
+                    "respondedAt": Timestamp(date: Date()), "updatedAt": FieldValue.serverTimestamp(),
+                ]) { _ in }
+                group.collection("members").document(uid).setData([
+                    "skips": answer == "skipping" ? FieldValue.arrayUnion([sessionKey]) : FieldValue.arrayRemove([sessionKey]),
+                ], merge: true) { _ in }
+                PendingWritesSyncTask.schedule()
+                return
+            }
+        }
 
         // A plain tap on the notification body (not an action button) deep-links
         // to the group; the RSVP actions fall through to the switch below.

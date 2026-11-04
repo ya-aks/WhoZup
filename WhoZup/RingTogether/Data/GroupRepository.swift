@@ -300,6 +300,21 @@ final class GroupRepository {
         ], merge: true) { _ in }
     }
 
+    /// Plans: a host's "Ask now". The `headcountAskNow` Cloud Function sends it
+    /// to the chosen audience (admins only, at most 5 per session).
+    func askNow(groupId: String, sessionKey: String, audience: String, question: String, note: String?) {
+        guard let uid = currentUid else { return }
+        var data: [String: Any] = [
+            "byUid": uid, "manual": true, "sessionKey": sessionKey,
+            "audience": audience, "question": question,
+            "createdAt": FieldValue.serverTimestamp(),
+        ]
+        if let note, !note.isEmpty { data["note"] = note }
+        db.collection("groups").document(groupId).collection("asks").addDocument(data: data) { [weak self] error in
+            if let error { Task { @MainActor in self?.lastError = error.localizedDescription } }
+        }
+    }
+
     /// Rebuilds the `RTGroup` list from raw docs + members + statuses.
     private func rebuild() {
         guard let uid = currentUid else { groups = []; hasPendingStatusSyncs = false; return }
@@ -510,6 +525,7 @@ final class GroupRepository {
             planStartTime: g.startTime,
             planMeetAt: g.meetAt?.dateValue(),
             session: session,
+            planAsks: g.headcountAsks ?? [],
             detailedDescription: g.detailedDescription,
             reminderCount: g.reminderCount ?? 0
         )

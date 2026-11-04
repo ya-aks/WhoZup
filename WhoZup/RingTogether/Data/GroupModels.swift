@@ -88,6 +88,10 @@ struct GroupMemberDoc: Codable, Identifiable {
     var alarmSetAt: Timestamp? = nil
     /// This member's personal habit in this group, if they built one.
     var habit: MemberHabit? = nil
+    /// The member's own alarm rings once instead of repeating (Check-ins).
+    var alarmOnce: Bool? = nil
+    /// The one-off checklist for a one-time alarm (Check-ins), same shape as a habit.
+    var checklist: MemberHabit? = nil
 }
 
 /// An append-only activity-feed entry (`groups/{id}/activity/{id}`).

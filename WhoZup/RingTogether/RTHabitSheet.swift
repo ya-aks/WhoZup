@@ -7,6 +7,9 @@
 //  long the routine stays open after the alarm stops, and whether the group
 //  sees your step names or only "2 of 3".
 //
+//  The same editor builds a one-time alarm's checklist (`checklist` mode): an
+//  optional name, up to five items, no tiny versions.
+//
 
 import SwiftUI
 
@@ -22,10 +25,17 @@ struct RTHabitDraft: Equatable {
     var steps: [Step] = [Step()]
     var windowMinutes = 30
     var showSteps = true
+    /// Building a one-time alarm's checklist rather than a habit.
+    var checklist = false
 
-    init() {}
+    var maxSteps: Int { checklist ? MemberHabit.maxChecklistItems : MemberHabit.maxSteps }
+
+    init(checklist: Bool = false) {
+        self.checklist = checklist
+    }
 
     init(_ habit: MemberHabit) {
+        checklist = habit.checklist
         name = habit.name
         steps = habit.steps.map { Step(title: $0.title, tiny: $0.tiny ?? "") }
         if steps.isEmpty { steps = [Step()] }
@@ -33,17 +43,21 @@ struct RTHabitDraft: Equatable {
         showSteps = habit.showSteps
     }
 
-    /// The habit, or nil until it has a name and at least one step.
+    /// The habit, or nil until it has a name and at least one step. A
+    /// checklist needs only one item: its name defaults to "Checklist", and it
+    /// has no tiny versions.
     var habit: MemberHabit? {
-        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        var name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if checklist && name.isEmpty { name = MemberHabit.defaultChecklistName }
         let steps = steps
             .map { HabitStep(title: $0.title.trimmingCharacters(in: .whitespacesAndNewlines),
-                             tiny: $0.tiny.trimmingCharacters(in: .whitespacesAndNewlines)) }
+                             tiny: checklist ? "" : $0.tiny.trimmingCharacters(in: .whitespacesAndNewlines)) }
             .filter { !$0.title.isEmpty }
             .map { HabitStep(title: $0.title, tiny: ($0.tiny ?? "").isEmpty ? nil : $0.tiny) }
         guard !name.isEmpty, !steps.isEmpty else { return nil }
-        return MemberHabit(name: name, steps: Array(steps.prefix(MemberHabit.maxSteps)),
-                           windowMinutes: windowMinutes, showSteps: showSteps)
+        let plan = MemberHabit(name: name, steps: Array(steps.prefix(maxSteps)),
+                               windowMinutes: windowMinutes, showSteps: showSteps)
+        return checklist ? plan.asChecklist : plan
     }
 }
 
@@ -55,12 +69,12 @@ struct RTHabitFields: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
-                label("My habit")
-                field("e.g. Morning run", text: $draft.name, size: 16)
+                label(draft.checklist ? "Name (optional)" : "My habit")
+                field(draft.checklist ? "e.g. Airport run" : "e.g. Morning run", text: $draft.name, size: 16)
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                label("After my alarm stops, I'll…")
+                label(draft.checklist ? "After this alarm stops, I need to…" : "After my alarm stops, I'll…")
                 ForEach($draft.steps) { $step in
                     stepRow($step, number: (draft.steps.firstIndex { $0.id == step.id } ?? 0) + 1)
                 }
@@ -68,7 +82,7 @@ struct RTHabitFields: View {
                     Button {
                         draft.steps.append(.init())
                     } label: {
-                        Text("+ Add a step")
+                        Text(draft.checklist ? "+ Add an item" : "+ Add a step")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(canAddStep ? accent : RT.inkFaint)
                             .padding(.horizontal, 12)
@@ -82,7 +96,7 @@ struct RTHabitFields: View {
                     .buttonStyle(.plain)
                     .disabled(!canAddStep)
                     Spacer()
-                    Text("\(draft.steps.count) of \(MemberHabit.maxSteps) · max \(MemberHabit.maxSteps) steps")
+                    Text("\(draft.steps.count) of \(draft.maxSteps) · max \(draft.maxSteps) \(draft.checklist ? "items" : "steps")")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(RT.inkSecondary)
                 }
@@ -100,14 +114,14 @@ struct RTHabitFields: View {
                 .clipped()
                 .background(RoundedRectangle(cornerRadius: 16).fill(RT.card))
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(RT.cardBorder, lineWidth: 1))
-                Text("Your routine stays open for \(draft.windowMinutes) min after the alarm stops.")
+                Text("Your \(draft.checklist ? "checklist" : "routine") stays open for \(draft.windowMinutes) min after the alarm stops.")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(RT.inkMuted)
             }
 
             Toggle(isOn: $draft.showSteps) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Show my step names")
+                    Text(draft.checklist ? "Show my item names" : "Show my step names")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(RT.ink)
                     Text("Off: the group sees \"2 of 3\" only")
@@ -119,7 +133,7 @@ struct RTHabitFields: View {
         }
     }
 
-    private var canAddStep: Bool { draft.steps.count < MemberHabit.maxSteps }
+    private var canAddStep: Bool { draft.steps.count < draft.maxSteps }
 
     private func stepRow(_ step: Binding<RTHabitDraft.Step>, number: Int) -> some View {
         HStack(alignment: .top, spacing: 10) {
@@ -130,8 +144,10 @@ struct RTHabitFields: View {
                 .background(Circle().fill(accent))
                 .padding(.top, 10)
             VStack(spacing: 6) {
-                field("Step \(number)", text: step.title, size: 15)
-                field("Tiny version (optional), e.g. step outside", text: step.tiny, size: 13, dashed: true)
+                field(draft.checklist ? "Item \(number)" : "Step \(number)", text: step.title, size: 15)
+                if !draft.checklist {
+                    field("Tiny version (optional), e.g. step outside", text: step.tiny, size: 13, dashed: true)
+                }
             }
             Button {
                 draft.steps.removeAll { $0.id == step.wrappedValue.id }
@@ -169,30 +185,42 @@ struct RTHabitFields: View {
     }
 }
 
-/// Add, edit or remove your habit in one group.
+/// Add, edit or remove your habit in one group — or, when your alarm there
+/// rings once, your checklist for it.
 struct RTHabitSheet: View {
     let groupId: String
+    var checklist: Bool = false
 
     @Environment(GroupRepository.self) private var repository
     @Environment(\.dismiss) private var dismiss
     @State private var draft = RTHabitDraft()
+    private var noun: String { checklist ? "checklist" : "habit" }
     @State private var loaded = false
     @State private var saving = false
     @State private var confirmRemove = false
 
-    private var existing: MemberHabit? { repository.myHabit(groupId: groupId) }
+    private var existing: MemberHabit? {
+        checklist ? repository.myChecklist(groupId: groupId) : repository.myHabit(groupId: groupId)
+    }
+
+    private func save(_ plan: MemberHabit?) async -> Bool {
+        checklist ? await repository.setMyChecklist(groupId: groupId, checklist: plan)
+            : await repository.setMyHabit(groupId: groupId, habit: plan)
+    }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text("Your alarm is the cue. Keep the steps small — it's doing them every day that builds the habit.")
+                    Text(checklist
+                         ? "This alarm rings once. List what you need to get done after it — the group sees you tick them off."
+                         : "Your alarm is the cue. Keep the steps small — it's doing them every day that builds the habit.")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(RT.inkMuted)
                     RTHabitFields(draft: $draft)
                     if existing != nil {
                         Button(role: .destructive) { confirmRemove = true } label: {
-                            Text("Remove habit")
+                            Text("Remove \(noun)")
                                 .font(.system(size: 15, weight: .bold))
                                 .foregroundStyle(RT.dotLate)
                                 .frame(maxWidth: .infinity, minHeight: 48)
@@ -203,7 +231,7 @@ struct RTHabitSheet: View {
                 .padding(20)
             }
             .background(RT.canvas)
-            .navigationTitle(existing == nil ? "Add a habit" : "Edit habit")
+            .navigationTitle(existing == nil ? "Add a \(noun)" : "Edit \(noun)")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
@@ -212,17 +240,17 @@ struct RTHabitSheet: View {
                         guard let habit = draft.habit else { return }
                         saving = true
                         Task {
-                            if await repository.setMyHabit(groupId: groupId, habit: habit) { dismiss() }
+                            if await save(habit) { dismiss() }
                             saving = false
                         }
                     }
                     .disabled(draft.habit == nil || saving)
                 }
             }
-            .alert("Remove this habit?", isPresented: $confirmRemove) {
+            .alert("Remove this \(noun)?", isPresented: $confirmRemove) {
                 Button("Remove", role: .destructive) {
                     Task {
-                        if await repository.setMyHabit(groupId: groupId, habit: nil) { dismiss() }
+                        if await save(nil) { dismiss() }
                     }
                 }
                 Button("Cancel", role: .cancel) {}
@@ -233,7 +261,7 @@ struct RTHabitSheet: View {
         .onAppear {
             guard !loaded else { return }
             loaded = true
-            if let existing { draft = RTHabitDraft(existing) }
+            if let existing { draft = RTHabitDraft(existing) } else { draft = RTHabitDraft(checklist: checklist) }
         }
     }
 }

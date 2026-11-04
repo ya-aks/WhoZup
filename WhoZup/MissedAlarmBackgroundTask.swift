@@ -43,10 +43,13 @@ enum MissedAlarmBackgroundTask {
 
     /// Requests the next background run. Call on launch and when backgrounding;
     /// resubmitting simply replaces the pending request.
-    static func schedule() {
+    /// `soonest`: ask to run right after this instead of in ~1h (a routine's
+    /// deadline, so its lock-screen card comes down close to on time).
+    static func schedule(soonest: Date? = nil) {
         let request = BGAppRefreshTaskRequest(identifier: identifier)
         // ~1h out; iOS decides the actual time based on usage patterns.
-        request.earliestBeginDate = Date(timeIntervalSinceNow: 60 * 60)
+        let hourOut = Date(timeIntervalSinceNow: 60 * 60)
+        request.earliestBeginDate = soonest.map { min($0, hourOut) } ?? hourOut
         do {
             try BGTaskScheduler.shared.submit(request)
         } catch {
@@ -77,6 +80,9 @@ enum MissedAlarmBackgroundTask {
         let name = user.displayName
             ?? user.email?.split(separator: "@").first.map(String.init)
             ?? "You"
+
+        // A routine whose window closed while the app slept: take its card down.
+        RoutineCoordinator.shared.expireIfNeeded()
 
         let repository = GroupRepository()
         repository.start(uid: user.uid, displayName: name)

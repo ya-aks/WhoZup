@@ -71,4 +71,26 @@ final class HabitModelsTests: XCTestCase {
         XCTAssertTrue(routine.isOpen(now: deadline.addingTimeInterval(-1)))
         XCTAssertFalse(routine.isOpen(now: deadline.addingTimeInterval(1)))
     }
+
+    func testUnfinishedRoutineReadsAsMissedOnlyAfterTheWindow() {
+        let deadline = Date(timeIntervalSince1970: 1_000_000)
+        let routine = RoutineProgress(day: "d", done: [true, false, false], tiny: false, deadline: Timestamp(date: deadline))
+        XCTAssertFalse(routine.isMissed(now: deadline.addingTimeInterval(-1)))
+        XCTAssertEqual(routine.summary(now: deadline.addingTimeInterval(-1)), "1 of 3")
+        XCTAssertTrue(routine.isMissed(now: deadline.addingTimeInterval(1)))
+        XCTAssertEqual(routine.summary(now: deadline.addingTimeInterval(1)), "1 of 3 · 2 missed")
+        let none = RoutineProgress(day: "d", done: [false, false, false], tiny: false, deadline: Timestamp(date: deadline))
+        XCTAssertEqual(none.summary(now: deadline.addingTimeInterval(1)), "skipped · 0 of 3")
+    }
+
+    func testChecklistDraftDefaultsItsNameAndAllowsFiveItemsWithoutTinyVersions() {
+        var draft = RTHabitDraft(checklist: true)
+        draft.steps = (0..<7).map { RTHabitDraft.Step(title: "item \($0)", tiny: "tiny") }
+        let plan = draft.habit
+        XCTAssertEqual(plan?.name, MemberHabit.defaultChecklistName)
+        XCTAssertEqual(plan?.steps.count, MemberHabit.maxChecklistItems)
+        XCTAssertEqual(plan?.checklist, true)
+        XCTAssertEqual(plan?.hasTinyVersion, false)
+        XCTAssertNil(plan?.firestoreData["isChecklist"], "the checklist flag is local only")
+    }
 }

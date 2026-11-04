@@ -26,10 +26,15 @@ struct HabitStep: Codable, Hashable {
     var tiny: String?
 }
 
-/// A member's habit in one group.
+/// A member's habit in one group — or, on a one-time Check-ins alarm, their
+/// checklist for that one morning (same shape, stored on `members/{uid}.checklist`).
 struct MemberHabit: Codable, Hashable {
     /// Most a routine may hold: small and specific beats ambitious.
     static let maxSteps = 3
+    /// Most a one-off checklist may hold.
+    static let maxChecklistItems = 5
+    /// Name shown when a checklist isn't given one.
+    static let defaultChecklistName = "Checklist"
     /// The routine stays open between 1 and 59 minutes after the alarm stops.
     static let windowRange = 1...59
 
@@ -39,6 +44,21 @@ struct MemberHabit: Codable, Hashable {
     var windowMinutes: Int
     /// Whether other members see the habit and step names, or only "2 of 3".
     var showSteps: Bool
+    /// Local only (never written to Firestore): this is a one-time alarm's
+    /// checklist, not a daily habit. A checklist opens after any Stop — snoozed
+    /// or late included — has no tiny versions, and builds no streak.
+    var isChecklist: Bool? = nil
+
+    var checklist: Bool { isChecklist == true }
+    /// What the UI calls it: "routine" for a habit, "checklist" for a checklist.
+    var kindNoun: String { checklist ? "checklist" : "routine" }
+
+    /// This plan marked as a checklist.
+    var asChecklist: MemberHabit {
+        var copy = self
+        copy.isChecklist = true
+        return copy
+    }
 
     /// Firestore map form, for merge writes.
     var firestoreData: [String: Any] {
@@ -105,6 +125,10 @@ struct RoutineProgress: Codable, Hashable {
         return now <= deadline
     }
 
+    /// The window closed with steps still undone (not a tiny-version day).
+    func isMissed(now: Date = Date()) -> Bool { !isComplete && !isOpen(now: now) }
+    var missedCount: Int { isComplete ? 0 : total - doneCount }
+
     var firestoreData: [String: Any] {
         var map: [String: Any] = ["day": day, "done": done, "tiny": tiny]
         if let tinySteps { map["tinySteps"] = tinySteps }
@@ -123,5 +147,11 @@ struct RoutineProgress: Codable, Hashable {
         if tiny { return "Tiny version" }
         if isComplete { return "Done" }
         return "\(doneCount) of \(total)"
+    }
+
+    /// The label once the window has closed: "1 of 3 · 2 missed", or "skipped".
+    func summary(now: Date = Date()) -> String {
+        guard isMissed(now: now) else { return summary }
+        return doneCount == 0 ? "skipped · 0 of \(total)" : "\(doneCount) of \(total) · \(missedCount) missed"
     }
 }

@@ -115,7 +115,9 @@ struct RTRootView: View {
         // app sat in the background, so re-check for skipped alarms then too.
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
-                // Opened with a routine still open: put its card on the lock screen.
+                // Opened with a routine still open: put its card on the lock screen;
+                // one whose time ran out comes off it.
+                RoutineCoordinator.shared.expireIfNeeded()
                 RoutineCoordinator.shared.ensureLiveActivity()
                 Task {
                     await AlarmReliability.sweep()
@@ -175,7 +177,7 @@ struct RTTabBar: View {
 
     var body: some View {
         HStack {
-            tabItem(.accountability, "Check-ins")
+            tabItem(.accountability, "Alarms")
             tabItem(.shared, "In Sync")
             tabItem(.events, "Events")
             tabItem(.more, "More")

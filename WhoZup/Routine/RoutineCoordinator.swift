@@ -98,8 +98,6 @@ struct RoutineSession: Codable, Equatable {
 final class RoutineCoordinator {
     static let shared = RoutineCoordinator()
 
-    /// How long a finished routine's card lingers on the lock screen.
-    static let finishedDismissal: TimeInterval = 15 * 60
     static let notificationID = "routine.start"
     /// "Finish your routine" — kept while a routine is open with no lock-screen card.
     static let pendingNotificationID = "routine.pending"
@@ -116,6 +114,14 @@ final class RoutineCoordinator {
             session = try? JSONDecoder().decode(RoutineSession.self, from: data)
         }
         expireIfNeeded()
+    }
+
+    /// Opens the routine screen only while there is something left to do. A
+    /// tap on a finished or timed-out card (or its notification) just opens
+    /// the app — there's nothing to check off, so no screen to dismiss.
+    func presentIfOpen() {
+        expireIfNeeded()
+        if openSession != nil { presentRoutine = true }
     }
 
     /// The open routine, if it is still within its window.
@@ -149,6 +155,8 @@ final class RoutineCoordinator {
         clearPendingNotification()
         store(new)
         write(new)
+        // Ask for background time at the deadline to take the card down then.
+        MissedAlarmBackgroundTask.schedule(soonest: new.deadline.addingTimeInterval(5))
 
         if startLiveActivity(new) {
             // Started from the foreground (Stop opened the app): show the routine
@@ -174,8 +182,13 @@ final class RoutineCoordinator {
     /// next), and a done step can't be undone.
     /// `tiny`: done with the step's tiny version rather than the full step.
     func completeStep(_ index: Int, tiny: Bool = false, groupId: String? = nil) async {
-        guard var s = session, groupId == nil || s.groupId == groupId,
-              s.isOpen(), index == s.nextIndex else { return }
+        guard var s = session, groupId == nil || s.groupId == groupId else { return }
+        guard s.isOpen() else {
+            // A tap on a card whose time ran out: just take the card away.
+            expireIfNeeded()
+            return
+        }
+        guard index == s.nextIndex else { return }
         s.done[index] = true
         var tinySteps = s.tinySteps ?? Array(repeating: false, count: s.done.count)
         if tinySteps.indices.contains(index) { tinySteps[index] = tiny && !(s.habit.steps[index].tiny ?? "").isEmpty }
@@ -202,7 +215,9 @@ final class RoutineCoordinator {
         guard let s = openSession else { return }
         if hasRunningLiveActivity(for: s) { return }
         let content = UNMutableNotificationContent()
-        content.title = "Finish your \(s.habit.name) routine · \(s.doneCount) of \(s.done.count)"
+        content.title = s.habit.checklist
+            ? "Finish your \(s.habit.name.lowercased()) · \(s.doneCount) of \(s.done.count)"
+            : "Finish your \(s.habit.name) routine · \(s.doneCount) of \(s.done.count)"
         let next = s.nextIndex.map { s.habit.steps[$0].title } ?? ""
         content.body = "Next: \(next) · by \(RTAlarmTime.display(RTAlarmTime.string(from: s.deadline)))"
         content.sound = nil
@@ -239,9 +254,15 @@ final class RoutineCoordinator {
     }
 
     /// Ends the routine once its window has passed; progress stays recorded.
+    /// iOS gives an app no wake-up at the deadline, so this runs whenever the
+    /// app next gets time (launch, foreground, a step tap, background refresh);
+    /// until then the card itself shows "Time's up" (it goes stale at the deadline).
     func expireIfNeeded(now: Date = Date()) {
         guard let s = session, !s.isComplete, now > s.deadline else { return }
         clearPendingNotification()
+        if presentRoutine { presentRoutine = false }
+        guard !Activity<RoutineActivityAttributes>.activities.isEmpty else { return }
+        RoutineLog.add("Window closed: ending the Live Activity")
         Task { await endLiveActivities() }
     }
 
@@ -277,7 +298,9 @@ final class RoutineCoordinator {
     private func announceFinished(_ s: RoutineSession) {
         guard let user = Auth.auth().currentUser, user.uid == s.uid else { return }
         let name = user.displayName ?? "Someone"
-        let what = s.habit.showSteps ? "finished their \(s.habit.name) routine" : "finished their routine"
+        let what = s.habit.checklist
+            ? "finished their \(s.habit.showSteps ? s.habit.name.lowercased() : "checklist")"
+            : (s.habit.showSteps ? "finished their \(s.habit.name) routine" : "finished their routine")
         Firestore.firestore().collection("groups").document(s.groupId).collection("activity").addDocument(data: [
             "kind": "routine_done",
             "message": "\(name) \(what)\(s.tiny || (s.tinySteps ?? []).contains(true) ? " (with a tiny version)" : "")",
@@ -318,7 +341,9 @@ final class RoutineCoordinator {
         for activity in Activity<RoutineActivityAttributes>.activities where activity.attributes.groupId == s.groupId {
             let content = ActivityContent(state: s.contentState, staleDate: s.deadline)
             if s.isComplete {
-                await activity.end(content, dismissalPolicy: .after(Date().addingTimeInterval(Self.finishedDismissal)))
+                // Finished: take the card off the lock screen now. Leaving it up
+                // only invited a tap into a checklist with nothing left to do.
+                await activity.end(content, dismissalPolicy: .immediate)
             } else {
                 await activity.update(content)
             }
@@ -335,7 +360,7 @@ final class RoutineCoordinator {
 
     private func postStartNotification(_ s: RoutineSession) async {
         let content = UNMutableNotificationContent()
-        content.title = "Start your \(s.habit.name) routine"
+        content.title = s.habit.checklist ? "Start your \(s.habit.name.lowercased())" : "Start your \(s.habit.name) routine"
         content.body = "Step 1: \(s.habit.steps.first?.title ?? "") · finish by \(RTAlarmTime.display(RTAlarmTime.string(from: s.deadline)))"
         content.sound = .default
         content.userInfo = ["kind": "routine"]

@@ -19,8 +19,7 @@ struct RTEditAlarmSheet: View {
     @State private var time: Date
     @State private var anchor: RTAlarmAnchor
     @State private var selectedDays: Set<Int>
-    /// Whether the alarm repeats. Only offered on shared alarms; accountability
-    /// alarms always repeat.
+    /// Whether the alarm repeats, or rings once (shared, and your own on Check-ins).
     @State private var repeats: Bool
     @State private var isWorking = false
 
@@ -29,7 +28,7 @@ struct RTEditAlarmSheet: View {
         _time = State(initialValue: group.alarm.isEmpty ? Date() : RTAlarmTime.date(from: group.alarm))
         _anchor = State(initialValue: group.alarmAnchor)
         _selectedDays = State(initialValue: group.alarmDays.isEmpty ? Set(RTWeekday.all) : Set(group.alarmDays))
-        _repeats = State(initialValue: !(group.type == .shared && group.alarmOnce))
+        _repeats = State(initialValue: !group.alarmOnce)
     }
 
     private var isShared: Bool { group.type == .shared }
@@ -61,23 +60,23 @@ struct RTEditAlarmSheet: View {
                     // how times are shown everywhere else.
                     .environment(\.locale, Locale(identifier: "en_US"))
 
-                // Shared alarms can be a single one-off or repeat; accountability
-                // alarms always repeat.
-                if isShared {
-                    Picker("Schedule", selection: $repeats) {
-                        Text("Once").tag(false)
-                        Text("Repeat").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, 20)
+                // Any alarm can be a single one-off or repeat.
+                Picker("Schedule", selection: $repeats) {
+                    Text("Once").tag(false)
+                    Text("Repeat").tag(true)
                 }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 20)
 
                 if repeats {
                     daysPicker
                 } else {
-                    Text("Rings once, on the next \(RTAlarmTime.display(RTAlarmTime.string(from: time))).")
+                    Text(isShared
+                         ? "Rings once, on the next \(RTAlarmTime.display(RTAlarmTime.string(from: time)))."
+                         : "Rings once, on the next \(RTAlarmTime.display(RTAlarmTime.string(from: time))). Instead of a habit, you can add a checklist for it.")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(RT.inkMuted)
+                        .multilineTextAlignment(.center)
                         .padding(.horizontal, 20)
                 }
 
@@ -164,7 +163,8 @@ struct RTEditAlarmSheet: View {
             await repository.setGroupAlarm(groupId: group.id, time: timeString, anchor: anchor,
                                            days: repeats ? normalizedDays : [], once: !repeats)
         } else {
-            await repository.setMyAlarm(groupId: group.id, time: timeString, days: normalizedDays)
+            await repository.setMyAlarm(groupId: group.id, time: timeString,
+                                        days: repeats ? normalizedDays : [], once: !repeats)
         }
         dismiss()
     }

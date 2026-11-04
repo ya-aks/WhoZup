@@ -99,7 +99,7 @@ enum RTGroupType: String, CaseIterable, Identifiable {
 
     var eyebrowText: String {
         switch self {
-        case .accountability: return "CHECK-INS"
+        case .accountability: return "ALARMS"
         case .shared: return "IN SYNC"
         case .event: return "EVENTS"
         }
@@ -151,7 +151,7 @@ enum RTGroupType: String, CaseIterable, Identifiable {
 
     var newGroupLabel: String {
         switch self {
-        case .accountability: return "＋  New check-in group"
+        case .accountability: return "＋  New alarm group"
         case .shared: return "＋  New In Sync group"
         case .event: return "＋  New event group"
         }
@@ -160,7 +160,7 @@ enum RTGroupType: String, CaseIterable, Identifiable {
     /// Heading for this feature in the "How it works" explainer.
     var helpTitle: String {
         switch self {
-        case .accountability: return "Check-ins"
+        case .accountability: return "Alarms"
         case .shared: return "In Sync"
         case .event: return "Events"
         }

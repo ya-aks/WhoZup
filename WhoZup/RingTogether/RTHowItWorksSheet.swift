@@ -49,7 +49,7 @@ struct RTHowItWorksSheet: View {
                 .padding(.bottom, 12)
             }
             .background(RT.canvas)
-            .navigationTitle("How \(type.helpTitle) works")
+            .navigationTitle(type == .accountability ? "How Alarms work" : "How \(type.helpTitle) works")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -246,7 +246,7 @@ private struct RTMockRing: View {
     var body: some View {
         VStack(spacing: 14) {
             Text("6:31").font(.rtDisplay(50, .black)).foregroundStyle(RT.ink)
-            Text(type == .accountability ? "Check-in Crew" : "In Sync Crew")
+            Text(type == .accountability ? "Morning Crew" : "In Sync Crew")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(RT.inkMuted)
             Spacer().frame(height: 8)

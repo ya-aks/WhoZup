@@ -52,7 +52,7 @@ struct RTDashboardView: View {
                     periodNav
 
                     if groupsToShow.isEmpty {
-                        Text(selectedType == .accountability ? "No check-in groups yet." : "No In Sync groups yet.")
+                        Text(selectedType == .accountability ? "No alarm groups yet." : "No In Sync groups yet.")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(RT.inkMuted)
                             .padding(.top, 20)
@@ -74,11 +74,11 @@ struct RTDashboardView: View {
                 if groupId == nil {
                     ToolbarItem(placement: .principal) {
                         Menu {
-                            Button("Check-ins") { selectedType = .accountability }
+                            Button("Alarms") { selectedType = .accountability }
                             Button("In Sync") { selectedType = .shared }
                         } label: {
                             HStack(spacing: 4) {
-                                Text(selectedType == .accountability ? "Rise Reports: Check-ins" : "Rise Reports: In Sync")
+                                Text(selectedType == .accountability ? "Rise Reports: Alarms" : "Rise Reports: In Sync")
                                     .font(.system(size: 16, weight: .bold))
                                     .foregroundStyle(RT.ink)
                                 Image(systemName: "chevron.down")
@@ -200,7 +200,8 @@ struct RTDashboardView: View {
     private func dayRow(group: RTGroup, member: RTMember) -> some View {
         let status = dayData[group.id]?[member.uid]
         // The routine only exists on a day the alarm was stopped on time.
-        let routine = status == .wokeUp ? dayRoutines[group.id]?[member.uid] : nil
+        // (A one-time alarm's checklist also follows a late stop.)
+        let routine = status == .wokeUp || status == .runningLate ? dayRoutines[group.id]?[member.uid] : nil
         return HStack(spacing: 10) {
             RTAvatar(initials: member.initials, color: member.displayAvatarColor, size: 26)
             VStack(alignment: .leading, spacing: 5) {
@@ -208,11 +209,12 @@ struct RTDashboardView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(RT.ink)
                 if let routine {
-                    RTRoutineBar(done: routine.done, tiny: routine.tiny, tinySteps: routine.tinySteps)
+                    let missed = routine.isMissed()
+                    RTRoutineBar(done: routine.done, tiny: routine.tiny, tinySteps: routine.tinySteps, missed: missed)
                         .frame(width: 120)
-                    Text("Routine \(routine.isComplete && !routine.tiny ? "done" : routine.summary.lowercased())")
+                    Text("Routine \(routine.isComplete && !routine.tiny ? "done" : routine.summary(now: Date()).lowercased())")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(routine.isComplete ? RT.dotOnTime : RT.inkSecondary)
+                        .foregroundStyle(routine.isComplete ? RT.dotOnTime : (missed ? RT.stepMissedText : RT.inkSecondary))
                 }
             }
             Spacer()
@@ -244,7 +246,7 @@ struct RTDashboardView: View {
         let dayStatuses: [(day: Int, status: RTStatus?, isFuture: Bool, routine: RoutineProgress?)] = (1...monthLength).map { d in
             let key = dayKeyFor(day: d, in: refDate)
             let status = outcomes[key]
-            return (d, status, d > today, status == .wokeUp ? routines[key] : nil)
+            return (d, status, d > today, status == .wokeUp || status == .runningLate ? routines[key] : nil)
         }
 
         var wokeCount = 0
@@ -328,10 +330,12 @@ struct RTDashboardView: View {
     }
 
     private var legend: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: selectedType == .accountability ? 10 : 14) {
             legendDot(RTStatus.wokeUp.chipColor, "Woke up")
             legendDot(RTStatus.snoozed.chipColor, "Snoozed")
             legendDot(RTStatus.silentLate.chipColor, "Late")
+            // Habit routines only exist on Check-ins.
+            if selectedType == .accountability { legendDot(RT.stepMissed, "Missed step") }
             legendDot(RT.cardBorder, "No data")
         }
         .frame(maxWidth: .infinity)
@@ -454,18 +458,20 @@ private struct RTMonthTimeline: View {
     /// A day you woke up with a habit is split into its routine steps; any
     /// other day is one solid block, as before.
     @ViewBuilder private func cellBar(_ entry: (day: Int, status: RTStatus?, isFuture: Bool, routine: RoutineProgress?)) -> some View {
+        // Undone steps are pale red once the window has closed, to-do beige while open.
+        let undone = entry.routine?.isMissed() == true ? RT.stepMissed : RT.stepTodo
         if let routine = entry.routine, !routine.tiny, routine.total > 1 {
             VStack(spacing: 1) {
                 ForEach(routine.done.indices, id: \.self) { i in
                     Rectangle().fill(routine.done[i]
-                                     ? (routine.isTiny(i) ? Color(hex: "#8fc4ae") : RT.dotOnTime)
-                                     : Color(hex: "#e1d9c8"))
+                                     ? (routine.isTiny(i) ? RT.stepTiny : RT.dotOnTime)
+                                     : undone)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 3))
         } else if let routine = entry.routine {
             RoundedRectangle(cornerRadius: 3)
-                .fill(routine.tiny ? Color(hex: "#8fc4ae") : (routine.isComplete ? RT.dotOnTime : Color(hex: "#e1d9c8")))
+                .fill(routine.tiny ? RT.stepTiny : (routine.isComplete ? RT.dotOnTime : undone))
         } else {
             RoundedRectangle(cornerRadius: 3).fill(fill(entry))
         }

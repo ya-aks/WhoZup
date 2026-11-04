@@ -309,14 +309,17 @@ enum AlarmActionHandler {
 
         // Stopped on time, first ring: open today's habit routine — straight
         // away, before anything touches the network. The tap is the response;
-        // syncing it is the app's job, never the user's wait.
-        if kind == .dismiss, status == .wokeUp, !snoozedThisRing,
+        // syncing it is the app's job, never the user's wait. A one-time alarm's
+        // checklist opens after any Stop, snoozed or late included: there's no
+        // habit to protect, only things to get done.
+        if kind == .dismiss,
            let groupId = record.groupIds.first(where: { record.habits?[$0] != nil }),
-           let habit = record.habits?[groupId] {
-            RoutineLog.add("Stop on time, first ring → open routine for \(groupId)")
+           let habit = record.habits?[groupId],
+           habit.checklist || (status == .wokeUp && !snoozedThisRing) {
+            RoutineLog.add("Stop → open \(habit.kindNoun) for \(groupId)")
             await RoutineCoordinator.shared.begin(
                 groupId: groupId,
-                groupName: record.groupNames?[groupId] ?? "Check-ins",
+                groupName: record.groupNames?[groupId] ?? "Alarms",
                 habit: habit, uid: uid, alarmFiredAt: scheduledTime, now: now
             )
         } else if kind == .dismiss {

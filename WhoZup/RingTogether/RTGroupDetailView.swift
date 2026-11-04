@@ -63,7 +63,8 @@ struct RTGroupDetailView: View {
             if let group { RTEditAlarmSheet(group: group) }
         }
         .sheet(isPresented: $showHabitSheet) {
-            RTHabitSheet(groupId: groupId)
+            RTHabitSheet(groupId: groupId,
+                         checklist: repository.group(id: groupId).map { $0.type == .accountability && $0.alarmOnce } ?? false)
         }
         .sheet(isPresented: $showShareInvite) {
             if let group, let code = repository.inviteCode(for: groupId) {
@@ -111,7 +112,7 @@ struct RTGroupDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    RTBadge(text: group.type == .accountability ? "Check-ins" : "In Sync",
+                    RTBadge(text: group.type == .accountability ? "Alarms" : "In Sync",
                             color: group.type.eyebrow,
                             background: group.type.badgeBackground)
                     if group.isCurrentUserAdmin {
@@ -137,25 +138,29 @@ struct RTGroupDetailView: View {
                 heroCard(group).padding(.top, 14)
 
                 // "What it is" first: your habit (Check-ins only; habits are
-                // personal), or the invitation to add one.
+                // personal) — or, when your alarm rings once, your checklist for
+                // that morning — or the invitation to add one.
                 let me = group.type == .accountability ? group.roster.first(where: { $0.isYou }) : nil
+                let myPlan = me.flatMap { group.alarmOnce ? $0.checklist : $0.habit }
                 if let me {
-                    if let habit = me.habit {
-                        RTYourHabitSection(habit: habit, alarm: group.alarm) { showHabitSheet = true }
+                    if let plan = myPlan {
+                        RTYourHabitSection(habit: plan, alarm: group.alarm) { showHabitSheet = true }
                             .padding(.top, 18)
                     } else {
                         RTAddHabitCard(
                             othersWithHabit: group.roster.filter { !$0.isYou && $0.hasHabit }.count,
-                            memberCount: group.roster.count
+                            memberCount: group.roster.count,
+                            checklist: group.alarmOnce
                         ) { showHabitSheet = true }
                         .padding(.top, 12)
+                        .id(me.uid)
                     }
                 }
 
                 actionRow(group).padding(.top, 12)
 
                 // Then "today's status": routine progress and the check-in.
-                if let me, let habit = me.habit {
+                if let me, let habit = myPlan {
                     RTTodayRoutineCard(groupId: group.id, habit: habit, routine: me.routine, alarm: group.alarm)
                         .padding(.top, 26)
                 }
@@ -481,7 +486,7 @@ struct RTMemberRow: View {
                 Text(member.detail)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(RT.inkMuted)
-                if member.hasHabit { habitLines }
+                if member.alarmOnce ? member.hasChecklist : member.hasHabit { habitLines }
                 if member.pendingSync {
                     HStack(spacing: 4) {
                         Image(systemName: "arrow.triangle.2.circlepath")
@@ -501,20 +506,29 @@ struct RTMemberRow: View {
     /// The routine bar (only after an on-time stop) above the habit name.
     @ViewBuilder private var habitLines: some View {
         let skipped = member.status == .snoozed || member.status == .silentLate || member.status == .runningLate
-        if let routine = member.routine, member.status == .wokeUp {
+        // A habit's routine follows an on-time stop; a checklist follows any stop.
+        if let routine = member.routine, member.status == .wokeUp || (member.alarmOnce && member.status == .runningLate) {
             HStack(spacing: 8) {
-                RTRoutineBar(done: routine.done, tiny: routine.tiny, tinySteps: routine.tinySteps)
+                let missed = routine.isMissed()
+                RTRoutineBar(done: routine.done, tiny: routine.tiny, tinySteps: routine.tinySteps, missed: missed)
                     .frame(width: 96)
                 Text(routineLabel(routine))
                     .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(routine.isComplete ? RT.dotOnTime : RT.inkSecondary)
+                    .foregroundStyle(routine.isComplete ? RT.dotOnTime : (missed ? RT.stepMissedText : RT.inkSecondary))
             }
             .padding(.top, 4)
         }
-        let name = member.habit?.name ?? "Building a habit"
-        Text(skipped ? "\(name) · no routine today" : name)
+        if member.alarmOnce {
+            // A one-time alarm's checklist opens after any Stop, so it's never "skipped".
+            Text(member.checklist?.name ?? "Has a checklist")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(RT.dotOnTime)
+        } else {
+            let name = member.habit?.name ?? "Building a habit"
+            Text(skipped ? "\(name) · no routine today" : name)
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(skipped ? RT.inkMuted : RT.dotOnTime)
+        }
     }
 
     private func routineLabel(_ routine: RoutineProgress) -> String {
@@ -522,6 +536,6 @@ struct RTMemberRow: View {
         if routine.isComplete, let at = routine.completedAt?.dateValue() {
             return "Done \(RTAlarmTime.display(RTAlarmTime.string(from: at)))"
         }
-        return routine.summary
+        return routine.summary(now: Date())
     }
 }

@@ -293,4 +293,20 @@ final class AlarmDeduplicationTests: XCTestCase {
         XCTAssertEqual(desired.count, 1)
         XCTAssertEqual(desired["06:30"], ["a", "b"])
     }
+
+    /// A one-time Check-ins alarm gets its own slot while it's still to ring,
+    /// and drops out a couple of hours after it rang so it isn't re-armed for tomorrow.
+    func testOneTimeCheckInAlarmRingsOnlyOnce() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        func once(firing fire: Date) -> RTGroup {
+            RTGroup(id: "a", type: .accountability, name: "G", alarm: "06:30", admin: nil, adminUids: [],
+                    isCurrentUserAdmin: true, event: nil, roster: [],
+                    alarmOnce: true, alarmOnceFireDate: fire)
+        }
+        XCTAssertEqual(RTAlarmSync.desiredAlarms(for: [once(firing: now.addingTimeInterval(3600))], now: now),
+                       ["06:30#once": ["a"]])
+        XCTAssertEqual(RTAlarmSync.desiredAlarms(for: [once(firing: now.addingTimeInterval(-30 * 60))], now: now),
+                       ["06:30#once": ["a"]], "still wanted while it may be snoozing")
+        XCTAssertTrue(RTAlarmSync.desiredAlarms(for: [once(firing: now.addingTimeInterval(-3 * 3600))], now: now).isEmpty)
+    }
 }

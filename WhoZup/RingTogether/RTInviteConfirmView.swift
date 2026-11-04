@@ -206,7 +206,7 @@ struct RTInviteConfirmView: View {
 
     private func typeLabel(_ type: RTGroupType) -> String {
         switch type {
-        case .accountability: return "Check-ins"
+        case .accountability: return "Alarms"
         case .shared: return "In Sync"
         case .event: return "Event"
         }

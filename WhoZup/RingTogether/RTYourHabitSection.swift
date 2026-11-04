@@ -18,12 +18,12 @@ struct RTYourHabitSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Your habit")
+                Text(habit.checklist ? "Your checklist" : "Your habit")
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(RT.ink)
                 Spacer()
                 Button(action: onEdit) {
-                    Label("Edit habit", systemImage: "pencil")
+                    Label(habit.checklist ? "Edit checklist" : "Edit habit", systemImage: "pencil")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(RT.dotOnTime)
                         .frame(minHeight: 44)
@@ -84,9 +84,13 @@ struct RTYourHabitSection: View {
     }
 
     private var footer: String {
+        let noun = habit.checklist ? "item" : "step"
         let visibility = habit.showSteps
-            ? "step names visible to the group"
-            : "the group sees only how many steps are done"
+            ? "\(noun) names visible to the group"
+            : "the group sees only how many \(noun)s are done"
+        if habit.checklist {
+            return "Opens when you stop your one-time \(RTAlarmTime.display(alarm)) alarm · \(visibility)"
+        }
         return "Opens when you stop your \(RTAlarmTime.display(alarm)) alarm on the first ring · \(visibility)"
     }
 }

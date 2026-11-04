@@ -103,7 +103,7 @@ struct WhoZupApp: App {
                 if Auth.auth().canHandle(url) { return }
                 // "Open routine" on the lock-screen Live Activity.
                 if RoutineLink.matches(url) {
-                    RoutineCoordinator.shared.presentRoutine = true
+                    RoutineCoordinator.shared.presentIfOpen()
                     return
                 }
                 if GIDSignIn.sharedInstance.handle(url) { return }

@@ -281,7 +281,7 @@ final class GroupRepository {
             if type != .event, status == .waiting {
                 let alarmTime = type == .accountability ? doc?.alarmTime : sharedLocalAlarm
                 let alarmDays = (type == .accountability ? doc?.alarmDays : g.alarmDays) ?? []
-                let once = type == .shared && (g.alarmOnce ?? false)
+                let once = type == .shared ? (g.alarmOnce ?? false) : (doc?.alarmOnce ?? false)
                 let lateWindow = TimeInterval((g.lateThresholdMinutes ?? 15) * 60)
                 // The alarm only counts from when it was set: a member's own
                 // `alarmSetAt` (accountability) or the group's (shared), falling
@@ -316,6 +316,9 @@ final class GroupRepository {
                 pendingSync: isYou && (pendingStatuses[gid]?.contains(memberUid) ?? false),
                 habit: (isYou || doc?.habit?.showSteps == true) ? doc?.habit : nil,
                 hasHabit: type == .accountability && doc?.habit != nil,
+                checklist: (isYou || doc?.checklist?.showSteps == true) ? doc?.checklist?.asChecklist : nil,
+                hasChecklist: type == .accountability && doc?.alarmOnce == true && doc?.checklist != nil,
+                alarmOnce: type == .accountability && doc?.alarmOnce == true,
                 // Only today's routine, and only while today's status stands.
                 routine: (isStatusFromToday && statusDoc?.routine?.day == Self.dayKey())
                     ? statusDoc?.routine : nil
@@ -363,9 +366,16 @@ final class GroupRepository {
 
         // Days the alarm rings: the member's own for accountability, the group's
         // for shared. Empty means every day.
-        let days = (type == .accountability
-            ? memberDocs.first { $0.id == uid }?.alarmDays
-            : g.alarmDays) ?? []
+        let myDoc = memberDocs.first { $0.id == uid }
+        let days = (type == .accountability ? myDoc?.alarmDays : g.alarmDays) ?? []
+
+        // A single alarm (the group's for shared, your own for Check-ins) rings
+        // at the first occurrence of its time after it was set — and only then.
+        // An unsynced `alarmSetAt` reads as nil locally: it was set just now.
+        let once = type == .shared ? (g.alarmOnce ?? false)
+            : (type == .accountability && myDoc?.alarmOnce == true)
+        let onceSetAt = (type == .accountability ? myDoc?.alarmSetAt : g.alarmSetAt)?.dateValue() ?? Date()
+        let onceFire = once && !displayAlarm.isEmpty ? Self.firstOccurrence(of: displayAlarm, after: onceSetAt) : nil
 
         return RTGroup(
             id: gid,
@@ -382,7 +392,8 @@ final class GroupRepository {
             alarmSourceTime: sourceTime,
             alarmAnchor: g.anchor,
             alarmDays: days,
-            alarmOnce: type == .shared && (g.alarmOnce ?? false),
+            alarmOnce: once,
+            alarmOnceFireDate: onceFire,
             detailedDescription: g.detailedDescription,
             reminderCount: g.reminderCount ?? 0
         )
@@ -433,7 +444,8 @@ final class GroupRepository {
         eventAt: Date? = nil,
         eventEndAt: Date? = nil,
         detailedDescription: String? = nil,
-        habit: MemberHabit? = nil
+        habit: MemberHabit? = nil,
+        checklist: MemberHabit? = nil
     ) async -> String? {
         guard let uid = currentUid else { return nil }
         if type == .event && !canCreateEvent {
@@ -474,16 +486,23 @@ final class GroupRepository {
         do {
             try await groupRef.setData(payload)
             let ownAlarm = type == .accountability ? alarmTime : nil
-            let ownDays = type == .accountability ? alarmDays : []
+            let ownOnce = type == .accountability && alarmOnce
+            let ownDays = type == .accountability && !ownOnce ? alarmDays : []
             try await writeMyMemberDoc(
                 groupId: groupRef.documentID, uid: uid, role: "admin",
-                alarmTime: ownAlarm, alarmDays: ownDays
+                alarmTime: ownAlarm, alarmDays: ownDays, alarmOnce: ownOnce
             )
-            // The creator's personal habit, if they built one (Check-ins only).
-            let ownHabit = type == .accountability ? habit : nil
+            // The creator's personal habit (repeating alarm) or one-off checklist
+            // (single alarm), if they built one — Check-ins only.
+            let ownHabit = type == .accountability && !ownOnce ? habit : nil
+            let ownChecklist = ownOnce ? checklist : nil
             if let ownHabit {
                 try await groupRef.collection("members").document(uid)
                     .setData(["habit": ownHabit.firestoreData], merge: true)
+            }
+            if let ownChecklist {
+                try await groupRef.collection("members").document(uid)
+                    .setData(["checklist": ownChecklist.firestoreData], merge: true)
             }
             // Show our own alarm immediately; the members listener for a
             // just-created group can otherwise miss our doc until a restart.
@@ -496,7 +515,9 @@ final class GroupRepository {
                 role: "admin",
                 alarmTime: ownAlarm,
                 alarmDays: ownDays.isEmpty ? nil : ownDays.sorted(),
-                habit: ownHabit
+                habit: ownHabit,
+                alarmOnce: ownOnce ? true : nil,
+                checklist: ownChecklist
             )
             rebuild()
             // The invite doubles as the invitee's only readable preview of the
@@ -618,15 +639,50 @@ final class GroupRepository {
         return (members[groupId]?.first { $0.id == uid } ?? pendingOwnMember[groupId])?.habit
     }
 
-    /// Every Check-ins group where the signed-in member has a habit, by group.
-    /// Persisted with the alarm records so a Stop in a cold background launch
-    /// knows which routine to open.
+    /// The signed-in member's one-time-alarm checklist in a group, if any.
+    func myChecklist(groupId: String) -> MemberHabit? {
+        guard let uid = currentUid else { return nil }
+        return (members[groupId]?.first { $0.id == uid } ?? pendingOwnMember[groupId])?.checklist?.asChecklist
+    }
+
+    /// Whether the signed-in member's own alarm in a group rings once.
+    func myAlarmOnce(groupId: String) -> Bool {
+        guard let uid = currentUid else { return false }
+        return (members[groupId]?.first { $0.id == uid } ?? pendingOwnMember[groupId])?.alarmOnce == true
+    }
+
+    /// What opens after your alarm in a group: the checklist when your alarm
+    /// rings once, the habit when it repeats.
+    func myPlan(groupId: String) -> MemberHabit? {
+        myAlarmOnce(groupId: groupId) ? myChecklist(groupId: groupId) : myHabit(groupId: groupId)
+    }
+
+    /// Every Check-ins group where the signed-in member has a habit (or, for a
+    /// one-time alarm, a checklist), by group. Persisted with the alarm records
+    /// so a Stop in a cold background launch knows which routine to open.
     func myHabitsByGroup() -> [String: MemberHabit] {
         var out: [String: MemberHabit] = [:]
         for group in groups where group.type == .accountability {
-            if let habit = myHabit(groupId: group.id) { out[group.id] = habit }
+            if let plan = myPlan(groupId: group.id) { out[group.id] = plan }
         }
         return out
+    }
+
+    /// Sets the signed-in member's one-time-alarm checklist, or removes it with `nil`.
+    @discardableResult
+    func setMyChecklist(groupId: String, checklist: MemberHabit?) async -> Bool {
+        guard let uid = currentUid else { return false }
+        var stored = checklist
+        stored?.isChecklist = nil
+        do {
+            try await db.collection("groups").document(groupId)
+                .collection("members").document(uid)
+                .setData(["checklist": stored?.firestoreData ?? FieldValue.delete()], merge: true)
+            return true
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
     }
 
     /// Sets the signed-in member's habit in a group, or removes it with `nil`.
@@ -652,14 +708,15 @@ final class GroupRepository {
 
     /// Sets the current member's own alarm (accountability) and notes it in the
     /// activity feed so the whole group is informed.
-    func setMyAlarm(groupId: String, time: String, days: [Int] = []) async {
+    func setMyAlarm(groupId: String, time: String, days: [Int] = [], once: Bool = false) async {
         guard let uid = currentUid else { return }
         do {
             try await db.collection("groups").document(groupId)
                 .collection("members").document(uid)
                 .setData([
                     "alarmTime": time,
-                    "alarmDays": days.sorted(),
+                    "alarmDays": once ? [] : days.sorted(),
+                    "alarmOnce": once,
                     "alarmSetAt": FieldValue.serverTimestamp(),
                 ], merge: true)
             await writeActivity(groupId: groupId, kind: "alarm_changed",
@@ -1069,9 +1126,9 @@ final class GroupRepository {
         let startOfToday = Calendar.current.startOfDay(for: now)
 
         for group in groups where group.type == .accountability || group.type == .shared {
-            // A one-time shared alarm has no recoverable past fire date from a
-            // bare "HH:mm", so we can't tell a miss from "never scheduled".
-            if group.type == .shared, group.alarmOnce { continue }
+            // A one-time alarm (shared, or your own on Check-ins) isn't swept: it
+            // rings once, and its pending check-in card covers a missed ring.
+            if group.alarmOnce { continue }
             let time = group.alarm    // already this device's local wall-clock
             guard !time.isEmpty else { continue }
 
@@ -1425,7 +1482,8 @@ final class GroupRepository {
 
     // MARK: - Helpers
 
-    private func writeMyMemberDoc(groupId: String, uid: String, role: String, alarmTime: String? = nil, alarmDays: [Int] = []) async throws {
+    private func writeMyMemberDoc(groupId: String, uid: String, role: String, alarmTime: String? = nil,
+                                  alarmDays: [Int] = [], alarmOnce: Bool = false) async throws {
         let initials = String(currentDisplayName.prefix(1)).uppercased()
         var data: [String: Any] = [
             "displayName": currentDisplayName,
@@ -1439,6 +1497,7 @@ final class GroupRepository {
             data["alarmSetAt"] = FieldValue.serverTimestamp()
         }
         if !alarmDays.isEmpty { data["alarmDays"] = alarmDays.sorted() }
+        if alarmOnce { data["alarmOnce"] = true }
         try await db.collection("groups").document(groupId)
             .collection("members").document(uid).setData(data, merge: true)
     }

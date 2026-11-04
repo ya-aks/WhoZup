@@ -171,7 +171,7 @@ final class AppFCM: NSObject, MessagingDelegate, UNUserNotificationCenterDelegat
         // "Start your routine" (no Live Activity could be shown): open it.
         if response.notification.request.content.userInfo["kind"] as? String == "routine" {
             RoutineCoordinator.shared.ensureLiveActivity()
-            RoutineCoordinator.shared.presentRoutine = true
+            RoutineCoordinator.shared.presentIfOpen()
             return
         }
 

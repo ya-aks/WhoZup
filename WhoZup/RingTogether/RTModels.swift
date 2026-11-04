@@ -135,6 +135,12 @@ struct RTMember: Identifiable {
     /// private (`showSteps == false`); `hasHabit` still says one exists.
     var habit: MemberHabit? = nil
     var hasHabit: Bool = false
+    /// The member's one-time alarm checklist (only when their alarm rings once).
+    /// Nil for others who keep it private; `hasChecklist` still says one exists.
+    var checklist: MemberHabit? = nil
+    var hasChecklist: Bool = false
+    /// The member's own alarm rings once (Check-ins).
+    var alarmOnce: Bool = false
     /// Today's routine, present only once it has started (an on-time stop).
     var routine: RoutineProgress? = nil
 
@@ -245,9 +251,12 @@ struct RTGroup: Identifiable {
     let alarmAnchor: RTAlarmAnchor
     /// Days the alarm rings (`1=Sunday … 7=Saturday`). Empty means every day.
     let alarmDays: [Int]
-    /// A single (non-recurring) shared alarm that rings once on the next
-    /// occurrence of the time. False for the usual recurring alarm.
+    /// A single (non-recurring) alarm that rings once: the group's for shared,
+    /// your own for Check-ins. False for the usual recurring alarm.
     let alarmOnce: Bool
+    /// For a single alarm, when it rings (or rang): the first occurrence of the
+    /// time after it was set. Nil for a repeating alarm.
+    let alarmOnceFireDate: Date?
     let detailedDescription: String?
     /// Admin nudges already sent for this event; gates the max-2 reminder cap.
     let reminderCount: Int
@@ -268,11 +277,13 @@ struct RTGroup: Identifiable {
         alarmAnchor: RTAlarmAnchor = .localTime,
         alarmDays: [Int] = [],
         alarmOnce: Bool = false,
+        alarmOnceFireDate: Date? = nil,
         detailedDescription: String? = nil,
         reminderCount: Int = 0
     ) {
         self.reminderCount = reminderCount
         self.alarmOnce = alarmOnce
+        self.alarmOnceFireDate = alarmOnceFireDate
         self.detailedDescription = detailedDescription
         self.alarmAnchor = alarmAnchor
         self.id = id

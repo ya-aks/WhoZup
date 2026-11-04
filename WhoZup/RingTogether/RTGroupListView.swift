@@ -346,7 +346,7 @@ struct RTEmptyState: View {
 
     private var message: String {
         switch type {
-        case .accountability: return "No check-in groups yet. Create one and invite friends to keep each other on time."
+        case .accountability: return "No alarm groups yet. Create one and invite friends to keep each other on time."
         case .shared: return "No In Sync groups yet. Create one common alarm for the whole crew."
         case .event: return "No events yet. Start one to send a one-tap “are you coming?” check."
         }

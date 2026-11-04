@@ -24,7 +24,7 @@ struct RTCreateGroupSheet: View {
     // Same-moment is the deliberate choice, not the accident.
     @State private var alarmAnchor: RTAlarmAnchor = .localTime
     @State private var selectedDays: Set<Int> = Set(RTWeekday.all)
-    /// Shared alarms can be a single one-off; accountability always repeats.
+    /// Any alarm can be a single one-off or repeat.
     @State private var repeats = true
     @State private var eventTitle = ""
     @State private var eventPlace = ""
@@ -36,6 +36,8 @@ struct RTCreateGroupSheet: View {
     /// Check-ins only: build a personal habit with your alarm.
     @State private var buildHabit = false
     @State private var habitDraft = RTHabitDraft()
+    /// Check-ins with a one-time alarm: a checklist for that morning instead.
+    @State private var checklistDraft = RTHabitDraft(checklist: true)
     @State private var showAddMembers = false
 
     var body: some View {
@@ -69,14 +71,12 @@ struct RTCreateGroupSheet: View {
                 case .accountability, .shared:
                     fieldLabel(type == .accountability ? "Your alarm time" : "Group alarm time")
                     wheelTime($alarmTime)
-                    if type == .shared {
-                        fieldLabel("Schedule")
-                        Picker("Schedule", selection: $repeats) {
-                            Text("Once").tag(false)
-                            Text("Repeat").tag(true)
-                        }
-                        .pickerStyle(.segmented)
+                    fieldLabel("Schedule")
+                    Picker("Schedule", selection: $repeats.animation()) {
+                        Text("Once").tag(false)
+                        Text("Repeat").tag(true)
                     }
+                    .pickerStyle(.segmented)
                     if repeats {
                         fieldLabel("Repeat")
                         RTWeekdayRow(selected: $selectedDays, accent: type.accent, badgeBackground: type.badgeBackground)
@@ -198,9 +198,11 @@ struct RTCreateGroupSheet: View {
 
     // MARK: - Pieces
 
-    /// "Build a habit with my alarm" — optional and personal.
+    /// "Build a habit with my alarm" — optional and personal. With a one-time
+    /// alarm it becomes "Add a checklist": a habit needs a repeating cue.
     private var habitCard: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let once = !repeats
+        return VStack(alignment: .leading, spacing: 0) {
             Toggle(isOn: $buildHabit.animation()) {
                 HStack(spacing: 12) {
                     Image(systemName: "checklist")
@@ -209,10 +211,11 @@ struct RTCreateGroupSheet: View {
                         .frame(width: 36, height: 36)
                         .background(RoundedRectangle(cornerRadius: 11).fill(RT.dotOnTime))
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Build a habit with my alarm")
+                        Text(once ? "Add a checklist to this alarm" : "Build a habit with my alarm")
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(RT.ink)
-                        Text("Just for you · others in the group choose for themselves")
+                        Text(once ? "Up to \(MemberHabit.maxChecklistItems) things to do after it rings · the group sees progress"
+                             : "Just for you · others in the group choose for themselves")
                             .font(.system(size: 12.5, weight: .medium))
                             .foregroundStyle(Color(hex: "#4a6b5e"))
                     }
@@ -223,7 +226,7 @@ struct RTCreateGroupSheet: View {
             .background(Color(hex: "#e3f3ec"))
 
             if buildHabit {
-                RTHabitFields(draft: $habitDraft)
+                RTHabitFields(draft: once ? $checklistDraft : $habitDraft)
                     .padding(16)
             }
         }
@@ -269,7 +272,7 @@ struct RTCreateGroupSheet: View {
 
     private var badgeLabel: String {
         switch type {
-        case .accountability: return "Check-ins"
+        case .accountability: return "Alarms"
         case .shared: return "In Sync"
         case .event: return "Event"
         }
@@ -288,7 +291,7 @@ struct RTCreateGroupSheet: View {
         if type == .event {
             return !eventTitle.trimmingCharacters(in: .whitespaces).isEmpty && eventAt > Date()
         }
-        if type == .accountability && buildHabit && habitDraft.habit == nil { return false }
+        if type == .accountability && buildHabit && (repeats ? habitDraft.habit : checklistDraft.habit) == nil { return false }
         return true
     }
 
@@ -305,9 +308,10 @@ struct RTCreateGroupSheet: View {
                 alarmTime: RTAlarmTime.string(from: alarmTime),
                 alarmAnchor: alarmAnchor,
                 alarmDays: repeats ? (selectedDays.count == RTWeekday.all.count ? [] : Array(selectedDays)) : [],
-                alarmOnce: type == .shared && !repeats,
+                alarmOnce: !repeats,
                 detailedDescription: trimmedDesc,
-                habit: (type == .accountability && buildHabit) ? habitDraft.habit : nil
+                habit: (type == .accountability && buildHabit && repeats) ? habitDraft.habit : nil,
+                checklist: (type == .accountability && buildHabit && !repeats) ? checklistDraft.habit : nil
             )
         case .event:
             code = await repository.createGroup(

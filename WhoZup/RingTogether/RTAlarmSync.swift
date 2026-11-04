@@ -93,6 +93,8 @@ final class RTAlarmSync {
     /// "HH:mm" -> whether that alarm's Stop opens the app (habit routine with
     /// Live Activities off), so flipping it reschedules the alarm.
     private var scheduledOpensApp: [String: Bool] = [:]
+    /// When each single ("#once") slot was scheduled to fire, so moving it is noticed.
+    private var scheduledFires: [String: Date] = [:]
     private var authorized: Bool?
 
     init(scheduler: AlarmScheduler, recorder: AlarmStatusRecorder, repository: GroupRepository) {
@@ -111,11 +113,14 @@ final class RTAlarmSync {
         let alarms = groups
             .filter { ($0.type == .accountability || $0.type == .shared) && !$0.alarm.isEmpty }
             .map { group -> String in
-                // Your habit too: a new or edited habit must reach the alarm record.
-                let habit = group.roster.first { $0.isYou }?.habit.map {
+                // Your habit (or one-time checklist) too: a new or edited one must
+                // reach the alarm record.
+                let me = group.roster.first { $0.isYou }
+                let plan = (group.alarmOnce ? me?.checklist : me?.habit).map {
                     "\($0.name)/\($0.steps.map(\.title).joined(separator: ","))/\($0.windowMinutes)"
                 } ?? ""
-                return "\(group.id):\(group.alarm):\(group.alarmDays.map(String.init).joined(separator: "-")):\(group.alarmOnce ? "1" : "0"):\(habit)"
+                let fire = group.alarmOnceFireDate.map { String(Int($0.timeIntervalSince1970)) } ?? ""
+                return "\(group.id):\(group.alarm):\(group.alarmDays.map(String.init).joined(separator: "-")):\(group.alarmOnce ? "1" : "0"):\(fire):\(plan)"
             }
             .sorted()
             .joined(separator: "|")
@@ -123,11 +128,21 @@ final class RTAlarmSync {
     }
 
     /// The reconcile key for a group's alarm: the plain time for a repeating
-    /// alarm, or "HH:mm#once" for a single (non-recurring) shared alarm — which
-    /// keeps a one-time alarm from colliding with a repeating one at the same
-    /// clock time.
+    /// alarm, or "HH:mm#once" for a single (non-recurring) alarm — shared, or
+    /// your own on Check-ins — which keeps a one-time alarm from colliding with
+    /// a repeating one at the same clock time.
     static func slotKey(for group: RTGroup) -> String {
-        (group.type == .shared && group.alarmOnce) ? "\(group.alarm)#once" : group.alarm
+        group.alarmOnce ? "\(group.alarm)#once" : group.alarm
+    }
+
+    /// A single alarm stays wanted until a while after it rang (long enough to
+    /// cover its snoozes), then it's done: rescheduling it would ring again the
+    /// next day.
+    static let onceGrace: TimeInterval = 2 * 60 * 60
+
+    static func onceIsOver(_ group: RTGroup, now: Date = Date()) -> Bool {
+        guard group.alarmOnce, let fire = group.alarmOnceFireDate else { return false }
+        return fire.addingTimeInterval(onceGrace) < now
     }
 
     /// The weekdays a *repeating* alarm at `time` should ring, unioned across
@@ -147,10 +162,10 @@ final class RTAlarmSync {
     /// The alarms that *should* exist, keyed by slot (see `slotKey`): repeating
     /// alarms collapse per distinct time, while a single shared alarm gets its
     /// own "#once" slot. Group ids are sorted for stable output.
-    static func desiredAlarms(for groups: [RTGroup]) -> [String: [String]] {
+    static func desiredAlarms(for groups: [RTGroup], now: Date = Date()) -> [String: [String]] {
         var desired: [String: [String]] = [:]
         for group in groups where group.type == .accountability || group.type == .shared {
-            guard !group.alarm.isEmpty else { continue }
+            guard !group.alarm.isEmpty, !onceIsOver(group, now: now) else { continue }
             desired[slotKey(for: group), default: []].append(group.id)
         }
         return desired.mapValues { $0.sorted() }
@@ -209,6 +224,7 @@ final class RTAlarmSync {
         scheduledLabels = scheduledLabels.filter { desired[$0.key] != nil }
         scheduledDays = scheduledDays.filter { desired[$0.key] != nil }
         scheduledOpensApp = scheduledOpensApp.filter { desired[$0.key] != nil }
+        scheduledFires = scheduledFires.filter { desired[$0.key] != nil }
 
         // Habits ride along with the alarm records so a Stop in a cold
         // background launch can open the routine.
@@ -225,7 +241,11 @@ final class RTAlarmSync {
             let once = key.hasSuffix("#once")
             let time = once ? String(key.dropLast("#once".count)) : key
             let days = once ? [] : Self.unionDays(forTime: time, in: repository.groups)
-            let fireDate = RTAlarmTime.nextDate(for: time)
+            // A single alarm rings at its own fire date (the first occurrence
+            // after it was set), not "the next 06:30" — which after it rang
+            // would be tomorrow.
+            let onceFire = once ? groupIds.compactMap { repository.group(id: $0)?.alarmOnceFireDate }.min() : nil
+            let fireDate = onceFire ?? RTAlarmTime.nextDate(for: time)
 
             // Always refresh these: the alarm may predate this launch, and the
             // set of groups behind it changes as groups are joined or left.
@@ -254,7 +274,7 @@ final class RTAlarmSync {
             // Already on the system with the same label and days — leave it
             // alone rather than churning a live alarm.
             if live[key] != nil, scheduledLabels[key] == label, scheduledDays[key] ?? [] == days,
-               scheduledOpensApp[key] ?? false == opensApp {
+               scheduledOpensApp[key] ?? false == opensApp, !once || scheduledFires[key] == fireDate {
                 continue
             }
 
@@ -270,6 +290,7 @@ final class RTAlarmSync {
                 scheduledLabels[key] = label
                 scheduledDays[key] = days
                 scheduledOpensApp[key] = opensApp
+                if once { scheduledFires[key] = fireDate }
             } catch {
                 // Leave it; a later reconcile retries. The registrations above
                 // are harmless if no alarm ends up existing.

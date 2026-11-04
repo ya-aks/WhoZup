@@ -23,6 +23,8 @@ private enum Palette {
     static let green = Color(red: 0.18, green: 0.65, blue: 0.49)
     static let amber = Color(red: 0.95, green: 0.76, blue: 0.48)
     static let track = Color.white.opacity(0.22)
+    /// Steps left undone when time ran out (pale late-red, as in Rise Report).
+    static let missed = Color(red: 0.94, green: 0.79, blue: 0.75)
 }
 
 /// The WhoZup app icon, clipped to an app-icon-style rounded square.
@@ -41,7 +43,7 @@ private struct AppIconBadge: View {
 struct RoutineLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RoutineActivityAttributes.self) { context in
-            RoutineLockScreenView(attributes: context.attributes, state: context.state)
+            RoutineLockScreenView(attributes: context.attributes, state: context.state, timeUp: context.isStale)
                 .activityBackgroundTint(Color.black.opacity(0.75))
                 .activitySystemActionForegroundColor(.white)
                 .widgetURL(RoutineLink.url)
@@ -66,7 +68,7 @@ struct RoutineLiveActivity: Widget {
                         .padding(.trailing, 6)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    StepRow(attributes: context.attributes, state: context.state)
+                    StepRow(attributes: context.attributes, state: context.state, timeUp: context.isStale)
                 }
             } compactLeading: {
                 AppIconBadge(size: 20)
@@ -85,6 +87,9 @@ struct RoutineLiveActivity: Widget {
 private struct RoutineLockScreenView: View {
     let attributes: RoutineActivityAttributes
     let state: RoutineActivityAttributes.ContentState
+    /// The finish window has passed (the activity went stale at the deadline).
+    /// The app ends the card the next time it runs; until then, no buttons.
+    var timeUp = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -95,7 +100,7 @@ private struct RoutineLockScreenView: View {
                     .foregroundStyle(.white.opacity(0.7))
                     .lineLimit(1)
                 Spacer()
-                if !state.isComplete {
+                if !state.isComplete && !timeUp {
                     Text("by \(attributes.deadline, style: .time)")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(Palette.amber)
@@ -103,23 +108,25 @@ private struct RoutineLockScreenView: View {
             }
             .padding(.top, 4)
 
-            StepRow(attributes: attributes, state: state)
+            StepRow(attributes: attributes, state: state, timeUp: timeUp)
 
             HStack(spacing: 4) {
                 ForEach(state.done.indices, id: \.self) { i in
                     Capsule().fill(state.done[i] || state.tiny
                                    ? (state.isTiny(i) ? Palette.green.opacity(0.55) : Palette.green)
-                                   : Palette.track)
+                                   : (timeUp ? Palette.missed : Palette.track))
                         .frame(height: 5)
                 }
             }
 
-            HStack {
-                Spacer()
-                Link(destination: RoutineLink.url) {
-                    Text("Open routine ›")
-                        .font(.footnote.weight(.bold))
-                        .foregroundStyle(.white)
+            if !timeUp && !state.isComplete {
+                HStack {
+                    Spacer()
+                    Link(destination: RoutineLink.url) {
+                        Text("Open routine ›")
+                            .font(.footnote.weight(.bold))
+                            .foregroundStyle(.white)
+                    }
                 }
             }
         }
@@ -134,9 +141,23 @@ private struct RoutineLockScreenView: View {
 private struct StepRow: View {
     let attributes: RoutineActivityAttributes
     let state: RoutineActivityAttributes.ContentState
+    var timeUp = false
 
     var body: some View {
-        if let next = state.nextIndex, !state.isComplete, attributes.steps.indices.contains(next) {
+        if timeUp && !state.isComplete {
+            HStack(spacing: 10) {
+                Image(systemName: "clock.badge.xmark")
+                    .font(.title2)
+                    .foregroundStyle(Palette.missed)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Time's up")
+                        .font(.headline)
+                    Text("\(state.doneCount) of \(attributes.steps.count) done · \(attributes.steps.count - state.doneCount) missed")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.7))
+                }
+            }
+        } else if let next = state.nextIndex, !state.isComplete, attributes.steps.indices.contains(next) {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("STEP \(next + 1) OF \(attributes.steps.count)")
@@ -146,26 +167,34 @@ private struct StepRow: View {
                         .font(.title3.weight(.bold))
                         .lineLimit(2)
                 }
-                Spacer(minLength: 8)
-                // A step with a tiny version can be marked either way.
-                if attributes.tinyVersion(of: next) != nil {
-                    Button(intent: RoutineStepDoneIntent(groupId: attributes.groupId, step: next, tiny: true)) {
-                        Text("Tiny")
-                            .font(.callout.weight(.bold))
-                            .padding(.horizontal, 6)
-                            .frame(minHeight: 44)
+                Spacer(minLength: 6)
+                // A step with a tiny version can be marked either way. With two
+                // buttons both go compact and keep their natural width, so the
+                // step title gives way instead of "Done" wrapping.
+                let hasTiny = attributes.tinyVersion(of: next) != nil
+                HStack(spacing: 6) {
+                    if hasTiny {
+                        Button(intent: RoutineStepDoneIntent(groupId: attributes.groupId, step: next, tiny: true)) {
+                            Text("Tiny")
+                                .font(.subheadline.weight(.bold))
+                                .lineLimit(1)
+                                .frame(minHeight: 36)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(Palette.green)
                     }
-                    .buttonStyle(.bordered)
+                    Button(intent: RoutineStepDoneIntent(groupId: attributes.groupId, step: next)) {
+                        Label("Done", systemImage: "checkmark")
+                            .font(hasTiny ? .subheadline.weight(.bold) : .body.weight(.bold))
+                            .labelStyle(.titleAndIcon)
+                            .lineLimit(1)
+                            .padding(.horizontal, hasTiny ? 2 : 14)
+                            .frame(minHeight: hasTiny ? 36 : 44)
+                    }
+                    .buttonStyle(.borderedProminent)
                     .tint(Palette.green)
                 }
-                Button(intent: RoutineStepDoneIntent(groupId: attributes.groupId, step: next)) {
-                    Label("Done", systemImage: "checkmark")
-                        .font(.body.weight(.bold))
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: 44)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Palette.green)
+                .fixedSize()
             }
         } else {
             HStack(spacing: 10) {

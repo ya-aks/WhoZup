@@ -12,12 +12,24 @@ import FirebaseCore
 import FirebaseFirestore
 import SwiftUI
 
+extension RT {
+    /// A routine step still to do while the window is open.
+    static let stepTodo = Color(hex: "#e1d9c8")
+    /// A routine step left undone after the window closed: a pale late-red.
+    static let stepMissed = Color(hex: "#f0c9c0")
+    /// Text for a routine that closed unfinished.
+    static let stepMissedText = Color(hex: "#a83f2e")
+    static let stepTiny = Color(hex: "#8fc4ae")
+}
+
 /// Horizontal step bar: one segment per step, filled when done.
 struct RTRoutineBar: View {
     let done: [Bool]
     var tiny: Bool = false
     /// Steps done with their tiny version, shown lighter.
     var tinySteps: [Bool]? = nil
+    /// The window closed: undone steps show as missed instead of to-do.
+    var missed: Bool = false
     var height: CGFloat = 6
 
     var body: some View {
@@ -25,12 +37,13 @@ struct RTRoutineBar: View {
             ForEach(done.indices, id: \.self) { i in
                 Capsule()
                     .fill(tiny || (done[i] && tinySteps?.indices.contains(i) == true && tinySteps![i])
-                          ? Color(hex: "#8fc4ae") : (done[i] ? RT.dotOnTime : Color(hex: "#e1d9c8")))
+                          ? RT.stepTiny : (done[i] ? RT.dotOnTime : (missed ? RT.stepMissed : RT.stepTodo)))
                     .frame(height: height)
             }
         }
         .accessibilityElement()
-        .accessibilityLabel(tiny ? "Routine done, tiny version" : "Routine \(done.filter { $0 }.count) of \(done.count)")
+        .accessibilityLabel(tiny ? "Routine done, tiny version"
+                            : "Routine \(done.filter { $0 }.count) of \(done.count)\(missed ? ", rest missed" : "")")
     }
 }
 
@@ -63,14 +76,14 @@ struct RTTodayRoutineCard: View {
         VStack(alignment: .leading, spacing: 10) {
             if let done {
                 HStack(spacing: 10) {
-                    RTRoutineBar(done: done, tiny: tiny, tinySteps: tinySteps, height: 8)
+                    RTRoutineBar(done: done, tiny: tiny, tinySteps: tinySteps, missed: !complete && !open, height: 8)
                     Text(tiny ? "Tiny" : "\(done.filter { $0 }.count)/\(done.count)")
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(RT.inkSecondary)
                 }
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text("Today's routine")
+                Text(habit.checklist ? "Today's checklist" : "Today's routine")
                     .font(.system(size: 15, weight: .bold))
                     .foregroundStyle(RT.ink)
                 if let done, open, let next = done.firstIndex(of: false), habit.steps.indices.contains(next) {
@@ -83,15 +96,18 @@ struct RTTodayRoutineCard: View {
                             .foregroundStyle(RTStatus.snoozed.chipColor)
                     }
                 } else if complete {
-                    Text(tiny ? "Done with the tiny version" : "Done — that's another rep")
+                    Text(habit.checklist ? "All done" : (tiny ? "Done with the tiny version" : "Done — that's another rep"))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(RT.dotOnTime)
-                } else if done != nil {
-                    Text("Window closed for today")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(RT.inkMuted)
+                } else if let done {
+                    let left = done.filter { !$0 }.count
+                    Text("Window closed · \(left) step\(left == 1 ? "" : "s") missed")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(RT.stepMissedText)
                 } else {
-                    Text("Opens when you stop your \(RTAlarmTime.display(alarm)) alarm on the first ring")
+                    Text(habit.checklist
+                         ? "Opens when you stop your \(RTAlarmTime.display(alarm)) alarm"
+                         : "Opens when you stop your \(RTAlarmTime.display(alarm)) alarm on the first ring")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(RT.inkMuted)
                 }
@@ -118,6 +134,8 @@ struct RTTodayRoutineCard: View {
 struct RTAddHabitCard: View {
     let othersWithHabit: Int
     let memberCount: Int
+    /// Your alarm rings once: offer a one-off checklist instead of a habit.
+    var checklist: Bool = false
     let action: () -> Void
 
     var body: some View {
@@ -129,10 +147,12 @@ struct RTAddHabitCard: View {
                     .frame(width: 34, height: 34)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(hex: "#e3f3ec")))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Add a habit to my alarm")
+                    Text(checklist ? "Add a checklist to this alarm" : "Add a habit to my alarm")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(RT.ink)
-                    Text(othersWithHabit > 0
+                    Text(checklist
+                         ? "Optional · up to \(MemberHabit.maxChecklistItems) things to do after it rings"
+                         : othersWithHabit > 0
                          ? "Optional · \(othersWithHabit) of \(memberCount) in this group already do"
                          : "Optional · a small routine right after you wake")
                         .font(.system(size: 12, weight: .medium))
@@ -159,33 +179,49 @@ struct RTRoutineView: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
+            let close = closeKey(now: context.date)
             content(now: context.date)
+                // Finished, or time ran out: show the result for a moment, then
+                // close by itself — no "Done" tap on an empty checklist.
+                .task(id: close) {
+                    guard close != 0 else { return }
+                    try? await Task.sleep(for: .seconds(close == 1 ? 1.6 : 2.5))
+                    if close == 2 { coordinator.expireIfNeeded() }
+                    dismiss()
+                }
         }
         .background(RT.canvas.ignoresSafeArea())
         // "Close · keep going later" must leave something to come back to.
         .onDisappear { Task { await coordinator.routineLeftOpen() } }
     }
 
+    /// 0 while there's work to do, 1 once finished, 2 once the window closed.
+    private func closeKey(now: Date) -> Int {
+        guard let s = coordinator.session else { return 0 }
+        if s.isComplete { return 1 }
+        return now > s.deadline ? 2 : 0
+    }
+
     @ViewBuilder private func content(now: Date) -> some View {
         if let s = coordinator.session, s.day == GroupRepository.dayKey(now) {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("ALARM STOPPED · ON TIME")
+                    Text(s.habit.checklist ? "ALARM STOPPED · CHECKLIST" : "ALARM STOPPED · ON TIME")
                         .font(.system(size: 12, weight: .bold))
                         .tracking(0.6)
                         .foregroundStyle(RT.dotOnTime)
-                    Text(s.isComplete ? "Routine done. That counts." : s.habit.name)
+                    Text(s.isComplete ? (s.habit.checklist ? "All done. Nice." : "Routine done. That counts.") : s.habit.name)
                         .font(.rtDisplay(28, .heavy))
                         .foregroundStyle(RT.ink)
                     Text(s.isComplete
-                         ? "Every rep makes the next one more automatic."
-                         : "\(s.groupName) · each step cues the next")
+                         ? (s.habit.checklist ? "Everything on your list is checked off." : "Every rep makes the next one more automatic.")
+                         : "\(s.groupName) · \(s.habit.checklist ? "one at a time, in order" : "each step cues the next")")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(RT.inkMuted)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
-                    RTRoutineBar(done: s.done, tiny: s.tiny, tinySteps: s.tinySteps, height: 10)
+                    RTRoutineBar(done: s.done, tiny: s.tiny, tinySteps: s.tinySteps, missed: !s.isComplete && now > s.deadline, height: 10)
                     HStack {
                         Text(s.tiny ? "Tiny version" : "\(s.doneCount) of \(s.done.count) done")
                         Spacer()

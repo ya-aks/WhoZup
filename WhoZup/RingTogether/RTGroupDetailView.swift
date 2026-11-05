@@ -182,7 +182,7 @@ struct RTGroupDetailView: View {
 
                 // Then "today's status": routine progress and the check-in.
                 if let me, let habit = myPlan {
-                    RTTodayRoutineCard(groupId: group.id, habit: habit, routine: me.routine, alarm: group.alarm)
+                    RTTodayRoutineCard(group: group, habit: habit, routine: me.routine, alarm: group.alarm)
                         .padding(.top, 26)
                 }
 

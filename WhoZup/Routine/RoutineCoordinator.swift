@@ -124,6 +124,50 @@ final class RoutineCoordinator {
         if openSession != nil { presentRoutine = true }
     }
 
+    /// Opens today's routine for `group` from anywhere in the app ("Continue",
+    /// the "Routine pending" pill). Works even when this phone didn't start it —
+    /// it began on your other device, or this phone's Stop never reached the
+    /// routine — by taking over the synced progress, so an open routine is never
+    /// out of reach while there's time left.
+    func open(group: RTGroup, now: Date = Date()) {
+        expireIfNeeded(now: now)
+        if let s = openSession, s.groupId == group.id, s.day == GroupRepository.dayKey(now) {
+            presentRoutine = true
+            ensureLiveActivity()
+            return
+        }
+        guard let me = group.roster.first(where: { $0.isYou }),
+              let habit = group.alarmOnce ? me.checklist : me.habit,
+              let progress = me.routine, adopt(groupId: group.id, groupName: group.name, uid: me.uid,
+                                               habit: habit, progress: progress, now: now)
+        else { return }
+        presentRoutine = true
+        ensureLiveActivity()
+    }
+
+    /// Makes a routine that's open in Firestore the local session. Returns
+    /// whether there is now an open session for it.
+    @discardableResult
+    func adopt(groupId: String, groupName: String, uid: String, habit: MemberHabit,
+               progress: RoutineProgress, now: Date = Date()) -> Bool {
+        guard progress.isOpen(now: now), progress.done.count == habit.steps.count,
+              let startedAt = progress.startedAt?.dateValue(), let deadline = progress.deadline?.dateValue()
+        else { return false }
+        // Already running here and at least as far along: keep the local copy.
+        if let s = session, s.groupId == groupId, s.day == progress.day, s.doneCount >= progress.doneCount {
+            return s.isOpen(now: now)
+        }
+        RoutineLog.add("Adopted the synced \(habit.kindNoun) for \(groupId) (\(progress.doneCount) of \(progress.total))")
+        store(RoutineSession(
+            groupId: groupId, groupName: groupName, uid: uid, habit: habit, day: progress.day,
+            done: progress.done, tiny: progress.tiny,
+            tinySteps: progress.tinySteps ?? Array(repeating: false, count: progress.done.count),
+            startedAt: startedAt, deadline: deadline, completedAt: nil
+        ))
+        MissedAlarmBackgroundTask.schedule(soonest: deadline.addingTimeInterval(5))
+        return true
+    }
+
     /// The open routine, if it is still within its window.
     var openSession: RoutineSession? {
         guard let session, !session.isComplete, Date() <= session.deadline else { return nil }

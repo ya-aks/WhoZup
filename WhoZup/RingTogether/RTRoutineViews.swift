@@ -49,7 +49,8 @@ struct RTRoutineBar: View {
 
 /// "Today's routine" on the group screen, for your own habit.
 struct RTTodayRoutineCard: View {
-    let groupId: String
+    let group: RTGroup
+    private var groupId: String { group.id }
     let habit: MemberHabit
     /// Today's routine as synced (from your status doc), if it started.
     let routine: RoutineProgress?
@@ -112,8 +113,10 @@ struct RTTodayRoutineCard: View {
                         .foregroundStyle(RT.inkMuted)
                 }
             }
-            if open, session != nil {
-                Button { coordinator.presentRoutine = true } label: {
+            // Open here or synced from your other device: either way it can be
+            // finished from this phone while there's time left.
+            if open, session != nil || routine?.isOpen(now: now) == true {
+                Button { coordinator.open(group: group, now: Date()) } label: {
                     Text("Continue")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(.white)

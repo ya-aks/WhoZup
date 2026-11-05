@@ -308,18 +308,22 @@ struct RTRoutinePendingPill: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             if group.type == .accountability, let pending = pending(now: context.date) {
-                HStack(spacing: 6) {
-                    Image(systemName: "checklist")
-                        .font(.system(size: 11, weight: .bold))
-                    Text("Routine pending · \(pending.done) of \(pending.total)")
-                        .font(.system(size: 12, weight: .bold))
+                // Tapping it opens the routine straight from the list, even one
+                // that started on your other device.
+                Button { RoutineCoordinator.shared.open(group: group) } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "checklist")
+                            .font(.system(size: 11, weight: .bold))
+                        Text("Routine pending · \(pending.done) of \(pending.total)")
+                            .font(.system(size: 12, weight: .bold))
+                    }
+                    .foregroundStyle(RTStatus.snoozed.chipColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(RTStatus.snoozed.chipBackground))
                 }
-                .foregroundStyle(RTStatus.snoozed.chipColor)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Capsule().fill(RTStatus.snoozed.chipBackground))
+                .buttonStyle(.plain)
                 .padding(.top, 10)
-                .accessibilityAddTraits(.isButton)
             }
         }
     }

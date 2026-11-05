@@ -122,6 +122,11 @@ enum RTAnalytics {
         log("alarm_response", ["group_id": groupId, "kind": kind, "status": status])
     }
 
+    /// A habit/checklist answered on the "What happened?" check-in card.
+    static func checkInRoutineAnswered(groupId: String, checklist: Bool, done: Int, total: Int) {
+        log("checkin_routine_answered", ["group_id": groupId, "checklist": yes(checklist), "done": done, "total": total])
+    }
+
     static func headcountPeopleViewed(groupId: String, bucket: String) {
         log("headcount_people_viewed", ["group_id": groupId, "bucket": bucket])
     }

@@ -1312,6 +1312,40 @@ final class GroupRepository {
         return !covered.isEmpty
     }
 
+    /// The habit or checklist to ask about after a check-in, if any: a
+    /// checklist follows any stop, a habit only "I woke up" (as with a real stop).
+    func checkInFollowUp(groupId: String, status: RTStatus) -> MemberHabit? {
+        guard let me = group(id: groupId)?.roster.first(where: { $0.isYou }) else { return nil }
+        if let checklist = me.checklist, !checklist.steps.isEmpty { return checklist }
+        if status == .wokeUp, let habit = me.habit, !habit.steps.isEmpty { return habit }
+        return nil
+    }
+
+    /// Records a habit or checklist answered on the check-in card, for an alarm
+    /// whose stop never reached the app (so its routine never started). The
+    /// window is already over, so unticked steps read as missed, as with a
+    /// routine left unfinished. Same fields as `RoutineCoordinator`, plus
+    /// `manual: true`. Queued, not awaited.
+    func recordManualRoutine(groupId: String, fireDate: Date, habit: MemberHabit, done: [Bool]) {
+        guard let uid = currentUid else { return }
+        let day = Self.dayKey(fireDate)
+        let deadline = fireDate.addingTimeInterval(TimeInterval(habit.windowMinutes * 60))
+        let allDone = !done.isEmpty && done.allSatisfy { $0 }
+        let progress = RoutineProgress(
+            day: day, done: done, tiny: false,
+            startedAt: Timestamp(date: fireDate),
+            deadline: Timestamp(date: min(deadline, Date())),
+            completedAt: allDone ? Timestamp(date: Date()) : nil)
+        var routine = progress.firestoreData
+        routine["manual"] = true
+        let group = db.collection("groups").document(groupId)
+        group.collection("statuses").document(uid).setData(["routine": routine], merge: true) { _ in }
+        group.collection("members").document(uid).collection("history").document(day)
+            .setData(["routine": routine, "date": day], merge: true) { _ in }
+        RTAnalytics.checkInRoutineAnswered(groupId: groupId, checklist: habit.checklist,
+                                           done: done.filter { $0 }.count, total: done.count)
+    }
+
     /// The first time "HH:mm" occurs at or after `date`, in this device's zone.
     /// "yyyy-MM-dd" + "HH:mm" in the device's zone.
     static func date(day: String, time: String) -> Date? {

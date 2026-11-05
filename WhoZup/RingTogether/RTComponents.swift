@@ -346,10 +346,22 @@ struct RTCheckInCard: View {
 
     @Environment(GroupRepository.self) private var repository
     @State private var saving = false
+    /// After "I woke up" / "I snoozed": the habit or checklist to ask about.
+    /// Kept here because the check-in itself is no longer pending once answered.
+    @State private var followUp: FollowUp?
+
+    private struct FollowUp {
+        let habit: MemberHabit
+        let fireDate: Date
+        let time: String
+        var done: [Bool]
+    }
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
-            if let pending = repository.pendingCheckIn(groupId: groupId, now: context.date) {
+            if let followUp {
+                routineQuestion(followUp).padding(.top, topSpacing)
+            } else if let pending = repository.pendingCheckIn(groupId: groupId, now: context.date) {
                 card(pending).padding(.top, topSpacing)
             }
         }
@@ -370,8 +382,8 @@ struct RTCheckInCard: View {
                 .foregroundStyle(RT.inkMuted)
 
             HStack(spacing: 10) {
-                choice("I woke up", status: .wokeUp, filled: true)
-                choice("I snoozed", status: .snoozed, filled: false)
+                choice("I woke up", status: .wokeUp, filled: true, pending: pending)
+                choice("I snoozed", status: .snoozed, filled: false, pending: pending)
             }
         }
         .padding(16)
@@ -380,12 +392,20 @@ struct RTCheckInCard: View {
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(accent.opacity(0.45), lineWidth: 1.5))
     }
 
-    private func choice(_ title: String, status: RTStatus, filled: Bool) -> some View {
+    private func choice(_ title: String, status: RTStatus, filled: Bool, pending: RTPendingCheckIn) -> some View {
         Button {
             guard !saving else { return }
             saving = true
+            // Decide before recording: the roster changes once the status lands.
+            let habit = repository.checkInFollowUp(groupId: groupId, status: status)
             Task {
                 await repository.recordManualCheckIn(groupId: groupId, status: status)
+                if let habit {
+                    withAnimation {
+                        followUp = FollowUp(habit: habit, fireDate: pending.fireDate, time: pending.time,
+                                            done: Array(repeating: false, count: habit.steps.count))
+                    }
+                }
                 saving = false
             }
         } label: {
@@ -398,5 +418,73 @@ struct RTCheckInCard: View {
         }
         .buttonStyle(RTPressStyle())
         .disabled(saving)
+    }
+
+    /// "Did you do your habit?" with one tick per step.
+    private func routineQuestion(_ f: FollowUp) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: f.habit.checklist ? "checklist" : "figure.walk")
+                    .font(.system(size: 14, weight: .bold))
+                Text(f.habit.checklist ? "Did you get through your checklist?" : "Did you do your habit?")
+                    .font(.system(size: 15, weight: .bold))
+            }
+            .foregroundStyle(RT.ink)
+            Text("Tick what you did after your \(RTAlarmTime.display(f.time)) alarm.")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(RT.inkMuted)
+
+            VStack(spacing: 6) {
+                ForEach(f.habit.steps.indices, id: \.self) { i in
+                    let on = f.done[i]
+                    Button {
+                        followUp?.done[i].toggle()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: on ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 20))
+                                .foregroundStyle(on ? RT.dotOnTime : RT.inkFaint)
+                            Text(f.habit.steps[i].title)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(RT.ink)
+                                .multilineTextAlignment(.leading)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 12).frame(minHeight: 44)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(on ? Color(hex: "#e3f3ec") : RT.canvas))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    withAnimation { followUp = nil }
+                } label: {
+                    Text("Not now")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(accent)
+                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(accent.opacity(0.12)))
+                }
+                .buttonStyle(RTPressStyle())
+                Button {
+                    repository.recordManualRoutine(groupId: groupId, fireDate: f.fireDate, habit: f.habit, done: f.done)
+                    withAnimation { followUp = nil }
+                } label: {
+                    Text("Save")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity).padding(.vertical, 12)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(accent))
+                }
+                .buttonStyle(RTPressStyle())
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18).fill(RT.card))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(accent.opacity(0.45), lineWidth: 1.5))
     }
 }

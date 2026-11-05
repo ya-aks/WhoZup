@@ -8,7 +8,7 @@
  *     (admins only, at most 5 per session).
  *   nudgeMember — when a member writes `groups/{id}/nudges/{id}` with
  *     `{byUid, toUid}`, sends that one person a loud "the group is waiting"
- *     push (members only, once per sender and target every 5 minutes).
+ *     push (the plan's host only, once per sender and target every 5 minutes).
  *
  * The scheduler also flags a one-time plan's alarm: `flagNotUpMinutes` after
  * it rang, the plan's admins get the names of anyone who said they'd come and
@@ -262,6 +262,12 @@ exports.nudgeMember = onDocumentCreated(
     const members = group?.memberUids || [];
     if (!members.includes(nudge.byUid) || !members.includes(nudge.toUid) || nudge.byUid === nudge.toUid) {
       await ref.update({ rejected: "not a member" });
+      return;
+    }
+    // Only the host nudges (a group with no admins recorded lets anyone).
+    const admins = group.adminUids || [];
+    if (admins.length && !admins.includes(nudge.byUid)) {
+      await ref.update({ rejected: "not the host" });
       return;
     }
     const recent = await groupRef.collection("nudges")

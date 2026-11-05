@@ -16,18 +16,47 @@ struct RTHeadcount {
     var cant = 0
     var waiting = 0
     var waitingNames: [String] = []
+    /// Everyone behind the counts, for the people sheet.
+    var people: [Person] = []
+
+    enum Bucket: CaseIterable { case coming, late, cant, waiting }
+
+    struct Person: Identifiable {
+        let member: RTMember
+        let bucket: Bucket
+        let detail: String
+        var id: String { member.uid }
+    }
 
     var invited: Int { coming + late + cant + waiting }
     var yes: Int { coming + late }
 
+    func count(_ bucket: Bucket) -> Int {
+        switch bucket {
+        case .coming: return coming
+        case .late: return late
+        case .cant: return cant
+        case .waiting: return waiting
+        }
+    }
+
     /// From a session's answers (plans with an alarm or repeating).
     init(group: RTGroup, session: RTPlanSession) {
         for member in group.roster {
+            let reply = session.replies[member.uid]
             switch session.answer(for: member.uid) {
-            case .coming: coming += 1
-            case .runningLate: late += 1
-            case .skipping: cant += 1
-            case nil: waiting += 1; waitingNames.append(member.displayName)
+            case .coming:
+                coming += 1
+                people.append(Person(member: member, bucket: .coming, detail: reply == nil ? "in by default" : "said yes"))
+            case .runningLate:
+                late += 1
+                people.append(Person(member: member, bucket: .late, detail: reply?.eta.map { "ETA \($0)" } ?? "running late"))
+            case .skipping:
+                cant += 1
+                people.append(Person(member: member, bucket: .cant, detail: "skipping this one"))
+            case nil:
+                waiting += 1; waitingNames.append(member.displayName)
+                people.append(Person(member: member, bucket: .waiting, detail: "hasn't answered"))
             }
         }
     }
@@ -36,10 +65,18 @@ struct RTHeadcount {
     init(eventRoster roster: [RTMember]) {
         for member in roster {
             switch member.status {
-            case .coming: coming += 1
-            case .runningLate: late += 1
-            case .cantMakeIt: cant += 1
-            default: waiting += 1; waitingNames.append(member.displayName)
+            case .coming:
+                coming += 1
+                people.append(Person(member: member, bucket: .coming, detail: member.detail))
+            case .runningLate:
+                late += 1
+                people.append(Person(member: member, bucket: .late, detail: member.detail))
+            case .cantMakeIt:
+                cant += 1
+                people.append(Person(member: member, bucket: .cant, detail: member.detail))
+            default:
+                waiting += 1; waitingNames.append(member.displayName)
+                people.append(Person(member: member, bucket: .waiting, detail: "hasn't answered"))
             }
         }
     }
@@ -55,6 +92,7 @@ struct RTHeadcountCard: View {
     var cantLabel = "Can't"
 
     @State private var showAskNow = false
+    @State private var peopleTab: RTHeadcount.Bucket?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -70,11 +108,18 @@ struct RTHeadcountCard: View {
                 }
                 bar
                 HStack(spacing: 6) {
-                    tile(headcount.coming, "Coming", Color(hex: "#1f5a46"), Color(hex: "#e3f3ec"))
-                    tile(headcount.late, "Late", Color(hex: "#7a4f0c"), Color(hex: "#fbeed6"))
-                    tile(headcount.cant, cantLabel, Color(hex: "#4f4a43"), RT.cardBorder)
-                    tile(headcount.waiting, "No answer", Color(hex: "#4f4a43"), RT.canvas)
+                    ForEach(RTHeadcount.Bucket.allCases, id: \.self) { bucket in
+                        let look = RTHeadcountLook(bucket, cantLabel: cantLabel)
+                        Button { peopleTab = bucket } label: {
+                            tile(headcount.count(bucket), look.label + " ›", look.fg, look.bg)
+                        }
+                        .buttonStyle(RTPressStyle())
+                        .accessibilityHint("Shows who")
+                    }
                 }
+                Text("Tap a count to see who")
+                    .font(.system(size: 12, weight: .medium)).foregroundStyle(RT.inkMuted)
+                    .padding(.top, -4)
                 Text(advice)
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color(hex: "#1f5a50"))
@@ -115,6 +160,11 @@ struct RTHeadcountCard: View {
                     }
                 }
             }
+        }
+        .sheet(item: Binding(get: { peopleTab.map(RTPeopleTab.init) }, set: { peopleTab = $0?.bucket })) { tab in
+            RTHeadcountPeopleSheet(groupId: groupId, sessionKey: sessionKey, headcount: headcount,
+                                   cantLabel: cantLabel, tab: tab.bucket)
+                .presentationDetents([.medium, .large])
         }
         .sheet(isPresented: $showAskNow) {
             RTAskNowSheet(groupId: groupId, sessionKey: sessionKey, headcount: headcount)
@@ -267,5 +317,115 @@ struct RTAskNowSheet: View {
             .overlay(RoundedRectangle(cornerRadius: 12).stroke(audience == id ? Color(hex: "#9a5d1c") : RT.cardBorder, lineWidth: audience == id ? 1.5 : 1))
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Labels and colours per headcount bucket, shared by the tiles and the sheet.
+struct RTHeadcountLook {
+    let label: String
+    let fg: Color
+    let bg: Color
+
+    init(_ bucket: RTHeadcount.Bucket, cantLabel: String) {
+        switch bucket {
+        case .coming: (label, fg, bg) = ("Coming", Color(hex: "#1f5a46"), Color(hex: "#e3f3ec"))
+        case .late: (label, fg, bg) = ("Late", Color(hex: "#7a4f0c"), Color(hex: "#fbeed6"))
+        case .cant: (label, fg, bg) = (cantLabel, Color(hex: "#4f4a43"), RT.cardBorder)
+        case .waiting: (label, fg, bg) = ("No answer", Color(hex: "#4f4a43"), RT.canvas)
+        }
+    }
+}
+
+private struct RTPeopleTab: Identifiable {
+    let bucket: RTHeadcount.Bucket
+    var id: String { "\(bucket)" }
+}
+
+/// The names behind the headcount: one tab per answer, the people under it,
+/// and for anyone who hasn't answered, a way to ask them again.
+struct RTHeadcountPeopleSheet: View {
+    let groupId: String
+    let sessionKey: String
+    let headcount: RTHeadcount
+    let cantLabel: String
+    @State var tab: RTHeadcount.Bucket
+
+    @Environment(GroupRepository.self) private var repository
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Who's coming").font(.rtDisplay(20, .heavy)).foregroundStyle(RT.ink)
+                Spacer()
+                Button("Done") { dismiss() }
+                    .font(.system(size: 15, weight: .bold)).foregroundStyle(Color(hex: "#9a5d1c"))
+            }
+            HStack(spacing: 4) {
+                ForEach(RTHeadcount.Bucket.allCases, id: \.self) { bucket in
+                    let look = RTHeadcountLook(bucket, cantLabel: cantLabel)
+                    let on = bucket == tab
+                    Button { tab = bucket } label: {
+                        VStack(spacing: 1) {
+                            Text("\(headcount.count(bucket))").font(.system(size: 16, weight: .heavy))
+                            Text(look.label).font(.system(size: 10, weight: .bold)).lineLimit(1)
+                        }
+                        .foregroundStyle(on ? look.fg : RT.inkMuted)
+                        .frame(maxWidth: .infinity, minHeight: 46)
+                        .background(RoundedRectangle(cornerRadius: 9).fill(on ? RT.card : .clear)
+                            .shadow(color: .black.opacity(on ? 0.08 : 0), radius: 2, y: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
+            .padding(4)
+            .background(RoundedRectangle(cornerRadius: 12).fill(RT.canvas))
+
+            let people = headcount.people.filter { $0.bucket == tab }
+            let look = RTHeadcountLook(tab, cantLabel: cantLabel)
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(people) { person in
+                        HStack(spacing: 10) {
+                            RTAvatar(initials: person.member.initials, color: person.member.displayAvatarColor, size: 32)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(person.member.isYou ? "You" : person.member.displayName)
+                                    .font(.system(size: 14, weight: .bold)).foregroundStyle(RT.ink)
+                                if !person.detail.isEmpty {
+                                    Text(person.detail).font(.system(size: 12, weight: .medium)).foregroundStyle(RT.inkMuted)
+                                }
+                            }
+                            Spacer()
+                            Text(look.label)
+                                .font(.system(size: 11, weight: .bold)).foregroundStyle(look.fg)
+                                .padding(.horizontal, 9).padding(.vertical, 4)
+                                .background(Capsule().fill(look.bg))
+                        }
+                        .padding(.vertical, 8)
+                        Divider().overlay(RT.cardBorder)
+                    }
+                    if people.isEmpty {
+                        Text("Nobody here yet").font(.system(size: 13, weight: .medium)).foregroundStyle(RT.inkMuted)
+                            .padding(.top, 24)
+                    }
+                }
+            }
+            if tab == .waiting && !people.isEmpty {
+                Button {
+                    repository.askNow(groupId: groupId, sessionKey: sessionKey, audience: "unanswered",
+                                      question: "Can you make it?", note: "")
+                    dismiss()
+                } label: {
+                    Text("Ask these \(people.count) again")
+                        .font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                        .background(RoundedRectangle(cornerRadius: 14).fill(Color(hex: "#9a5d1c")))
+                }
+                .buttonStyle(RTPressStyle())
+            }
+        }
+        .padding(20)
+        .background(RT.canvas.opacity(0.4))
     }
 }

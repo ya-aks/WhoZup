@@ -247,17 +247,17 @@ struct RTGroupListView: View {
             }
         }
         .sheet(isPresented: $showCreate) {
-            if plans, let createKind {
-                RTCreatePlanSheet(kind: createKind)
-            } else {
-                RTCreateGroupSheet(type: type)
-            }
+            RTCreateGroupSheet(type: type)
+        }
+        // Keyed on the picked kind so the form is built with it; an isPresented
+        // sheet read a stale nil kind on first open and showed the event form.
+        .sheet(item: $createKind) { kind in
+            RTCreatePlanSheet(kind: kind)
         }
         .sheet(isPresented: $showKindPicker) {
             RTPlanKindSheet { kind in
-                createKind = kind
                 // No event paywall on Plans for now (pricing is being reworked).
-                showCreate = true
+                createKind = kind
             }
             .presentationDetents([.large])
         }

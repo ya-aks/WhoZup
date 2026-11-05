@@ -194,9 +194,7 @@ struct RTAlarmGroupCard: View {
                 }
             }
             RTRoutinePendingPill(group: group)
-            Text(statusLine)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(RT.inkMuted)
+            RTGroupPulse(roster: group.roster, fallback: group.memberLabel)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -204,16 +202,113 @@ struct RTAlarmGroupCard: View {
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(RT.cardBorder, lineWidth: 1))
     }
 
-    /// "3 up · 1 snoozed · 1 no response", or who's in it before anyone's rung.
-    private var statusLine: String {
-        let up = group.roster.filter { $0.status == .wokeUp || $0.status == .runningLate }.count
-        let snoozed = group.roster.filter { $0.status == .snoozed }.count
-        let silent = group.roster.filter { $0.status == .silentLate }.count
-        var parts: [String] = []
-        if up > 0 { parts.append("\(up) up") }
-        if snoozed > 0 { parts.append("\(snoozed) snoozed") }
-        if silent > 0 { parts.append("\(silent) no response") }
-        return parts.isEmpty ? group.memberLabel : parts.joined(separator: " · ")
+}
+
+/// Who's up in a group at a glance, at any size: a few faces (you, then
+/// whoever isn't up yet) ringed by status with a +N, a proportional bar, and
+/// colour-keyed counts. Before anyone's alarm has rung it's just the faces.
+struct RTGroupPulse: View {
+    let roster: [RTMember]
+    let fallback: String
+
+    private static let upColor = RT.dotOnTime
+    private static let snoozeColor = Color(hex: "#d98c3a")
+    private static let silentColor = Color(hex: "#b9b2a5")
+
+    private var up: Int { roster.filter { $0.status == .wokeUp || $0.status == .runningLate }.count }
+    private var snoozed: Int { roster.filter { $0.status == .snoozed }.count }
+    private var silent: Int { roster.filter { $0.status == .silentLate }.count }
+
+    /// You first, then the people worth a look (not up), then everyone else.
+    private var faces: [RTMember] {
+        func rank(_ m: RTMember) -> Int {
+            if m.isYou { return 0 }
+            switch m.status {
+            case .silentLate: return 1
+            case .snoozed: return 2
+            case .wokeUp, .runningLate: return 4
+            default: return 3
+            }
+        }
+        return Array(roster.sorted { rank($0) < rank($1) }.prefix(4))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                HStack(spacing: -8) {
+                    ForEach(faces) { member in
+                        Text(member.isYou ? "YOU" : member.initials)
+                            .font(.system(size: member.isYou ? 9 : 11, weight: .heavy))
+                            .foregroundStyle(.white)
+                            .frame(width: 30, height: 30)
+                            .background(Circle().fill(member.displayAvatarColor))
+                            .overlay(Circle().stroke(ring(member.status), lineWidth: 2))
+                            .overlay(Circle().stroke(RT.card, lineWidth: 2).padding(-2))
+                            .accessibilityLabel("\(member.isYou ? "You" : member.name), \(member.status.label)")
+                    }
+                    if roster.count > faces.count {
+                        Text("+\(roster.count - faces.count)")
+                            .font(.system(size: 12, weight: .heavy))
+                            .foregroundStyle(Color(hex: "#4f4a43"))
+                            .padding(.horizontal, 8)
+                            .frame(minWidth: 30, minHeight: 30)
+                            .background(Capsule().fill(Color(hex: "#efe8da")))
+                            .overlay(Capsule().stroke(RT.card, lineWidth: 2).padding(-2))
+                    }
+                }
+                Spacer(minLength: 8)
+                Text(roster.count == 1 ? "Just you" : "\(roster.count) in group")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(RT.inkMuted)
+            }
+            if up + snoozed + silent > 0 {
+                GeometryReader { geo in
+                    let total = CGFloat(max(1, roster.count))
+                    let parts: [(Int, Color)] = [(up, Self.upColor), (snoozed, Self.snoozeColor),
+                                                 (silent, Self.silentColor),
+                                                 (roster.count - up - snoozed - silent, Color(hex: "#e6dfd0"))]
+                    let shown = parts.filter { $0.0 > 0 }
+                    let spacing = CGFloat(max(0, shown.count - 1)) * 2
+                    HStack(spacing: 2) {
+                        ForEach(shown.indices, id: \.self) { i in
+                            Rectangle().fill(shown[i].1)
+                                .frame(width: max(4, (geo.size.width - spacing) * CGFloat(shown[i].0) / total))
+                        }
+                    }
+                }
+                .frame(height: 6)
+                .clipShape(Capsule())
+                .accessibilityHidden(true)
+                HStack(spacing: 12) {
+                    if up > 0 { count(up, "up", Self.upColor) }
+                    if snoozed > 0 { count(snoozed, "snoozed", Self.snoozeColor) }
+                    if silent > 0 { count(silent, "no response", Self.silentColor) }
+                }
+            } else {
+                Text(fallback)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(RT.inkMuted)
+            }
+        }
+        .padding(.top, 2)
+    }
+
+    private func ring(_ status: RTStatus) -> Color {
+        switch status {
+        case .wokeUp, .runningLate: return Self.upColor
+        case .snoozed: return Self.snoozeColor
+        case .silentLate: return Self.silentColor
+        default: return RT.cardBorder
+        }
+    }
+
+    private func count(_ n: Int, _ label: String, _ color: Color) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            (Text("\(n)").bold().foregroundStyle(RT.ink) + Text(" \(label)").foregroundStyle(RT.inkMuted))
+                .font(.system(size: 13, weight: .medium))
+        }
     }
 }
 

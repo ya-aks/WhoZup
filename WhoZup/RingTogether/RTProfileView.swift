@@ -26,6 +26,7 @@ struct RTProfileView: View {
     @State private var isSigningOut = false
     @State private var deleteError: String?
     @State private var showRoutineLog = false
+    @State private var showFeedback = false
 
     /// Result of a restore attempt, surfaced as an alert.
     private enum RestoreAlert: Identifiable {
@@ -221,6 +222,14 @@ struct RTProfileView: View {
             }
             .buttonStyle(.plain)
             .simultaneousGesture(TapGesture().onEnded { RTAnalytics.appShareOpened() })
+            Divider().overlay(RT.divider)
+            Button { showFeedback = true } label: {
+                settingRowContent("Send feedback", trailing: "›")
+            }
+            .buttonStyle(.plain)
+            .sheet(isPresented: $showFeedback) {
+                RTFeedbackSheet().presentationDetents([.large])
+            }
             Divider().overlay(RT.divider)
             Button(action: onLeaveTip) {
                 settingRowContent("Leave a tip", trailing: "♥ Optional")

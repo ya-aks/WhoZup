@@ -142,6 +142,9 @@ enum RTAnalytics {
     /// `tab`: alarms, plans, more.
     static func howItWorksOpened(tab: String) { log("how_it_works_opened", ["tab": tab]) }
 
+    /// `category`: idea, problem, other. (The text itself goes to Firestore, never here.)
+    static func feedbackSent(category: String) { log("feedback_sent", ["category": category]) }
+
     // MARK: - Money
 
     static func tipSheetOpened() { log("tip_sheet_opened") }

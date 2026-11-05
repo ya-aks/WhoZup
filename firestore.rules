@@ -42,6 +42,17 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // In-app feedback (More → Send feedback). Users can only create their own,
+    // with a non-empty message; nobody reads them from the app (console only).
+    match /feedbacks/{feedbackId} {
+      allow create: if isAuthenticated()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 4000;
+      allow read, update, delete: if false;
+    }
+
     // Default deny for unauthenticated requests
     match /{document=**} {
       allow read, write: if false;

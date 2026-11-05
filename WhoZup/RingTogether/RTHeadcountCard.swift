@@ -368,6 +368,7 @@ struct RTHeadcountPeopleSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Who's coming").font(.rtDisplay(20, .heavy)).foregroundStyle(RT.ink)
+                    .onAppear { RTAnalytics.headcountPeopleViewed(groupId: groupId, bucket: "\(tab)") }
                 Spacer()
                 Button("Done") { dismiss() }
                     .font(.system(size: 15, weight: .bold)).foregroundStyle(Color(hex: "#9a5d1c"))
@@ -376,7 +377,10 @@ struct RTHeadcountPeopleSheet: View {
                 ForEach(RTHeadcount.Bucket.allCases, id: \.self) { bucket in
                     let look = RTHeadcountLook(bucket, cantLabel: cantLabel)
                     let on = bucket == tab
-                    Button { tab = bucket } label: {
+                    Button {
+                        tab = bucket
+                        RTAnalytics.headcountPeopleViewed(groupId: groupId, bucket: "\(bucket)")
+                    } label: {
                         VStack(spacing: 1) {
                             Text("\(headcount.count(bucket))").font(.system(size: 16, weight: .heavy))
                             Text(look.label).font(.system(size: 10, weight: .bold)).lineLimit(1)

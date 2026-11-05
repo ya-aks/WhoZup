@@ -31,12 +31,15 @@ struct TipTier: Identifiable, Hashable {
     let displayPrice: String
     /// Raw price used only for sorting low -> high.
     let priceValue: Decimal
+    /// ISO currency code, for analytics revenue.
+    let currencyCode: String
 
-    init(id: String, displayName: String, displayPrice: String, priceValue: Decimal) {
+    init(id: String, displayName: String, displayPrice: String, priceValue: Decimal, currencyCode: String? = nil) {
         self.id = id
         self.displayName = displayName
         self.displayPrice = displayPrice
         self.priceValue = priceValue
+        self.currencyCode = currencyCode ?? (displayPrice.hasPrefix("₹") ? "INR" : "USD")
     }
 }
 
@@ -47,6 +50,7 @@ extension TipTier {
         self.displayName = product.displayName.isEmpty ? product.id : product.displayName
         self.displayPrice = product.displayPrice
         self.priceValue = product.price
+        self.currencyCode = product.priceFormatStyle.currencyCode
     }
 }
 
@@ -201,6 +205,8 @@ final class TipStore {
             switch outcome {
             case .success:
                 purchaseStates[tier.id] = .success
+                RTAnalytics.tipPurchased(productId: tier.id, value: NSDecimalNumber(decimal: tier.priceValue).doubleValue,
+                                         currency: tier.currencyCode)
             case .userCancelled:
                 purchaseStates[tier.id] = .idle
             case .pending:

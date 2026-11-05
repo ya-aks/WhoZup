@@ -367,6 +367,8 @@ struct RTCreatePlanSheet: View {
         isWorking = true
         defer { isWorking = false }
         let chosen = Self.askOptions(kind).filter { asks[$0.ask.id] ?? false }.map(\.ask)
+        let customAsks = Self.askOptions(kind).contains { (asks[$0.ask.id] ?? false) != $0.on }
+        let weeklyBefore = repository.weeklyPlansHosted
         let code = await repository.createPlan(
             kind: kind,
             name: name.trimmingCharacters(in: .whitespaces),
@@ -381,6 +383,13 @@ struct RTCreatePlanSheet: View {
             weeklyLookahead: kind == .repeating
         )
         if let code {
+            let ring = kind == .onceAlarm || (kind == .repeating && hasAlarm)
+            RTAnalytics.planCreated(
+                groupId: repository.lastCreatedGroupId ?? "", kind: kind, ring: ring, leadMinutes: alarmLead,
+                customLead: customLead, flagNotUp: kind == .onceAlarm && flagNotUp,
+                everyoneIn: kind == .repeating && everyoneIn, asks: chosen.count, customAsks: customAsks,
+                hasPlace: !place.trimmingCharacters(in: .whitespaces).isEmpty,
+                days: kind == .repeating ? days.count : 0, weeklyPlansHosted: weeklyBefore)
             createdCode = code
             showAddMembers = true
         }

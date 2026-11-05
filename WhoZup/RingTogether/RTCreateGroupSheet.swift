@@ -339,6 +339,8 @@ struct RTCreateGroupSheet: View {
             )
         }
         if let code {
+            RTAnalytics.groupCreated(groupId: repository.lastCreatedGroupId ?? "", type: type, repeats: repeats,
+                                     habit: type == .accountability && buildHabit)
             createdCode = code
             showAddMembers = true
         }

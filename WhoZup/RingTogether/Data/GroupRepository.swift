@@ -73,6 +73,12 @@ final class GroupRepository {
     private var statusListeners: [String: ListenerRegistration] = [:]
     /// Plans: one listener per plan on its next session's answers, keyed by group.
     private var sessionListeners: [String: (dayKey: String, listener: ListenerRegistration)] = [:]
+    /// Analytics: this device's Ask now count per "groupId|session".
+    private var askNowCounts: [String: Int] = [:]
+    /// The id of the group most recently created on this device (for analytics).
+    private(set) var lastCreatedGroupId: String?
+    /// Last user properties sent, so they're only sent on change.
+    private var lastAnalyticsProps: [Int] = []
     /// Plans: the next session's answers, by group then uid.
     private var sessionReplies: [String: [String: RTSessionReply]] = [:]
 
@@ -315,6 +321,11 @@ final class GroupRepository {
             "updatedAt": FieldValue.serverTimestamp(),
         ]
         data["eta"] = eta ?? NSNull()
+        if let raw = rawGroups[groupId] {
+            RTAnalytics.planAnswered(groupId: groupId, kind: Self.analyticsKind(raw),
+                                     answer: answer == .coming ? "in" : answer == .runningLate ? "late" : "skip",
+                                     ahead: sessionListeners[groupId].map { $0.dayKey != dayKey } ?? false)
+        }
         // Queued, not awaited: the tap is the answer; syncing is our job.
         group.collection("sessions").document(dayKey).collection("responses").document(uid)
             .setData(data) { [weak self] error in
@@ -327,8 +338,9 @@ final class GroupRepository {
 
     /// Plans: a loud "the group is waiting" push to one member who isn't up
     /// (sent by the `nudgeMember` Cloud Function, at most every 5 minutes).
-    func nudge(groupId: String, toUid: String) {
+    func nudge(groupId: String, toUid: String, all: Bool = false) {
         guard let uid = currentUid else { return }
+        RTAnalytics.nudgeSent(groupId: groupId, all: all)
         db.collection("groups").document(groupId).collection("nudges").addDocument(data: [
             "byUid": uid, "toUid": toUid, "createdAt": FieldValue.serverTimestamp(),
         ]) { _ in }
@@ -344,6 +356,9 @@ final class GroupRepository {
             "createdAt": FieldValue.serverTimestamp(),
         ]
         if let note, !note.isEmpty { data["note"] = note }
+        let countKey = "\(groupId)|\(sessionKey)"
+        askNowCounts[countKey, default: 0] += 1
+        RTAnalytics.askNowSent(groupId: groupId, audience: audience, manualIndex: askNowCounts[countKey] ?? 1)
         db.collection("groups").document(groupId).collection("asks").addDocument(data: data) { [weak self] error in
             if let error { Task { @MainActor in self?.lastError = error.localizedDescription } }
         }
@@ -357,6 +372,17 @@ final class GroupRepository {
             .compactMap { buildRTGroup($0, uid: uid) }
         hasPendingStatusSyncs = pendingStatuses.values.contains { !$0.isEmpty }
         seedUsageIfNeeded()
+        let props = [
+            groups.filter { $0.type == .accountability }.count,
+            groups.filter { $0.planKind != nil && $0.hostedByCurrentUser }.count,
+            groups.filter { $0.planKind != nil && !$0.hostedByCurrentUser }.count,
+            weeklyPlansHosted,
+        ]
+        if props != lastAnalyticsProps {
+            lastAnalyticsProps = props
+            RTAnalytics.updateUserProperties(alarmGroups: props[0], plansHosted: props[1], plansJoined: props[2],
+                                             weeklyPlansHosted: props[3])
+        }
     }
 
     private func buildRTGroup(_ g: FirestoreGroup, uid: String) -> RTGroup? {
@@ -625,6 +651,7 @@ final class GroupRepository {
         }
         let code = Self.makeInviteCode()
         let groupRef = db.collection("groups").document()
+        lastCreatedGroupId = groupRef.documentID
 
         var payload: [String: Any] = [
             "type": type.rawValue,
@@ -763,6 +790,11 @@ final class GroupRepository {
             let defaultAlarm = invite.previewGroupType == .accountability ? invite.alarmTime : nil
             try await writeMyMemberDoc(groupId: invite.groupId, uid: uid, role: "member", alarmTime: defaultAlarm)
             await writeActivity(groupId: invite.groupId, kind: "joined", message: "\(currentDisplayName) joined the group")
+            // Group size for analytics: one read, best-effort.
+            if let snap = try? await db.collection("groups").document(invite.groupId).getDocument(),
+               let raw = try? snap.data(as: FirestoreGroup.self) {
+                RTAnalytics.groupJoined(groupId: invite.groupId, kind: Self.analyticsKind(raw), groupSize: raw.memberUids.count)
+            }
             return true
         } catch {
             lastError = error.localizedDescription
@@ -1149,6 +1181,16 @@ final class GroupRepository {
             "updatedAt": FieldValue.serverTimestamp(),
         ]
         if let eta { payload["eta"] = eta }
+        if let raw = rawGroups[groupId] {
+            let kind = Self.analyticsKind(raw)
+            switch status {
+            case .coming, .runningLate, .cantMakeIt:
+                RTAnalytics.planAnswered(groupId: groupId, kind: kind,
+                                         answer: status == .coming ? "in" : status == .runningLate ? "late" : "skip", ahead: false)
+            default:
+                RTAnalytics.alarmResponse(groupId: groupId, kind: kind, status: status.storageKey)
+            }
+        }
         db.collection("groups").document(groupId)
             .collection("statuses").document(uid)
             .setData(payload) { [weak self] error in
@@ -1683,6 +1725,14 @@ final class GroupRepository {
     }
 
     func group(id: String) -> RTGroup? { groups.first { $0.id == id } }
+
+    /// Weekly plans this user hosts (analytics: the "second weekly plan" pricing trigger).
+    var weeklyPlansHosted: Int { groups.filter { $0.planKind == .repeating && $0.hostedByCurrentUser }.count }
+
+    /// The analytics kind of a raw group doc.
+    static func analyticsKind(_ raw: FirestoreGroup) -> String {
+        RTAnalytics.kind(type: raw.groupType, planKind: raw.planKind.flatMap(RTPlanKind.init(rawValue:)))
+    }
 
     func groups(of type: RTGroupType) -> [RTGroup] { groups.filter { $0.type == type } }
 

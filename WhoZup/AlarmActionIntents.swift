@@ -148,6 +148,7 @@ enum FirebaseBootstrap {
     static func ensureConfigured() {
         guard FirebaseApp.app() == nil else { return }
         FirebaseApp.configure()
+        RTAnalytics.configure()
         // Store the auth session in the shared Keychain group so the notification
         // content extension can post an event RSVP as this user. No-op (via try?)
         // until the Keychain Sharing capability is added to the target.

@@ -220,6 +220,7 @@ struct RTProfileView: View {
                 settingRowContent("Invite friends", trailing: "Share app ›")
             }
             .buttonStyle(.plain)
+            .simultaneousGesture(TapGesture().onEnded { RTAnalytics.appShareOpened() })
             Divider().overlay(RT.divider)
             Button(action: onLeaveTip) {
                 settingRowContent("Leave a tip", trailing: "♥ Optional")

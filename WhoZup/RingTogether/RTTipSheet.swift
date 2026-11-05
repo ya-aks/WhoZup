@@ -21,6 +21,7 @@ struct RTTipSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             Capsule().fill(RT.cardBorder).frame(width: 40, height: 5).padding(.top, 10)
+                .onAppear { RTAnalytics.tipSheetOpened() }
 
             Text("♥")
                 .font(.system(size: 34))

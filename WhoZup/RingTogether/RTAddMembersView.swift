@@ -37,6 +37,10 @@ struct RTAddMembersView: View {
         InviteLink.url(code: code, groupName: groupName, invitedBy: repository.myDisplayName)
     }
     private var joinLink: String { joinURL.absoluteString }
+    /// The group's analytics kind, found by its invite code.
+    private var analyticsKind: String {
+        repository.groups.first { repository.inviteCode(for: $0.id) == code }.map(RTAnalytics.kind) ?? "unknown"
+    }
     private var shareText: String {
         "Join “\(groupName)” on whoZup: \(joinLink)"
     }
@@ -116,6 +120,7 @@ struct RTAddMembersView: View {
                         .padding(.vertical, 13)
                         .background(RoundedRectangle(cornerRadius: 14).fill(accent.opacity(0.12)))
                 }
+                .simultaneousGesture(TapGesture().onEnded { RTAnalytics.inviteShareOpened(method: "link", kind: analyticsKind) })
                 ShareLink(item: shareText) {
                     Label("Share", systemImage: "square.and.arrow.up")
                         .font(.system(size: 14, weight: .bold))
@@ -124,6 +129,7 @@ struct RTAddMembersView: View {
                         .padding(.vertical, 13)
                         .background(RoundedRectangle(cornerRadius: 14).fill(accent))
                 }
+                .simultaneousGesture(TapGesture().onEnded { RTAnalytics.inviteShareOpened(method: "text", kind: analyticsKind) })
             }
         }
     }

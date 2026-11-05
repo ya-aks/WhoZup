@@ -120,6 +120,7 @@ struct RTPlanKindSheet: View {
                 Button {
                     guard let weekly, let ring else { return }
                     let kind: RTPlanKind = weekly ? .repeating : (ring ? .onceAlarm : .once)
+                    RTAnalytics.planQuestionsAnswered(weekly: weekly, ring: ring)
                     dismiss()
                     // Let this sheet finish closing before the form opens.
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { onPick(kind, ring) }

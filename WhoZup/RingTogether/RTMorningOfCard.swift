@@ -131,7 +131,7 @@ struct RTMorningOfCard: View {
             if isHost && flagged.count > 1 {
                 let left = flagged.filter { !nudged.contains($0.uid) }
                 Button {
-                    for member in left { repository.nudge(groupId: group.id, toUid: member.uid) }
+                    for member in left { repository.nudge(groupId: group.id, toUid: member.uid, all: true) }
                     nudged.formUnion(left.map(\.uid))
                 } label: {
                     Text(left.isEmpty ? "Everyone nudged" : "Nudge all \(left.count)")

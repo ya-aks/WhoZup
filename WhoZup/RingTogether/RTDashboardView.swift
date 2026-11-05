@@ -69,6 +69,7 @@ struct RTDashboardView: View {
             .background(RT.canvas)
             .scrollIndicators(.hidden)
             .navigationTitle(groupId == nil ? "" : "Rise Reports")
+            .onAppear { RTAnalytics.riseReportViewed(scope: groupId == nil ? "all" : "group") }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if groupId == nil {

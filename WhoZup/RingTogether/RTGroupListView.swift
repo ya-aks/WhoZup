@@ -178,7 +178,7 @@ struct RTGroupListView: View {
                             withAnimation { showFabMenu = false }
                             // Plans: pick the kind first.
                             if plans {
-                                showKindPicker = true
+                                showKindPicker = true; RTAnalytics.planCreateStarted()
                                 return
                             }
                             // Paywall gate: creating an event over the free limit

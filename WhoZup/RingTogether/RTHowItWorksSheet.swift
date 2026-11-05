@@ -27,6 +27,8 @@ struct RTHowItWorksSheet: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                Color.clear.frame(height: 0)
+                    .onAppear { RTAnalytics.howItWorksOpened(tab: plans ? "plans" : type == .accountability ? "alarms" : "more") }
                 TabView(selection: $page) {
                     ForEach(steps.indices, id: \.self) { i in
                         RTWalkStepView(step: steps[i]).tag(i)

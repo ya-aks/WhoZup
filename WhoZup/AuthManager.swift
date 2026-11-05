@@ -381,13 +381,26 @@ public final class AuthManager {
         self.firstName = trimmedFirst
         self.lastName = trimmedLast
         self.needsNameSetup = false
+        RTAnalytics.profileCompleted()
     }
 
     /// Creates `users/{uid}` on first sign-in. Field shapes must stay in
     /// sync with firestore.rules (`isValidUser`).
+    /// phone, google, apple or email, from the account's first provider.
+    private static func analyticsMethod(_ user: FirebaseAuth.User) -> String {
+        switch user.providerData.first?.providerID {
+        case "phone": return "phone"
+        case "google.com": return "google"
+        case "apple.com": return "apple"
+        case "password": return "email"
+        default: return user.providerData.first?.providerID ?? "unknown"
+        }
+    }
+
     private func ensureUserProfile(for user: FirebaseAuth.User) async throws {
         let ref = db.collection("users").document(user.uid)
         let snapshot = try await ref.getDocument()
+        RTAnalytics.signedIn(method: Self.analyticsMethod(user), isNew: !snapshot.exists)
         if !snapshot.exists {
             let parsed = Self.parseNames(email: user.email, displayName: user.displayName)
             var displayName = user.displayName

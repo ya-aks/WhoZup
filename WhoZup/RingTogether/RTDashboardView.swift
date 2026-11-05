@@ -29,7 +29,7 @@ struct RTDashboardView: View {
 
     private var groupsToShow: [RTGroup] {
         if let groupId { return repository.group(id: groupId).map { [$0] } ?? [] }
-        return repository.groups(of: selectedType)
+        return repository.groups(of: selectedType).filter(\.hasRiseReport)
     }
 
     /// Never let the user page into the future.
@@ -52,7 +52,7 @@ struct RTDashboardView: View {
                     periodNav
 
                     if groupsToShow.isEmpty {
-                        Text(selectedType == .accountability ? "No alarm groups yet." : "No In Sync groups yet.")
+                        Text(selectedType == .accountability ? "No repeating alarms yet." : "No recurring meetups yet.")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(RT.inkMuted)
                             .padding(.top, 20)
@@ -75,10 +75,10 @@ struct RTDashboardView: View {
                     ToolbarItem(placement: .principal) {
                         Menu {
                             Button("Alarms") { selectedType = .accountability }
-                            Button("In Sync") { selectedType = .shared }
+                            Button("Plans") { selectedType = .shared }
                         } label: {
                             HStack(spacing: 4) {
-                                Text(selectedType == .accountability ? "Rise Reports: Alarms" : "Rise Reports: In Sync")
+                                Text(selectedType == .accountability ? "Rise Reports: Alarms" : "Rise Reports: Plans")
                                     .font(.system(size: 16, weight: .bold))
                                     .foregroundStyle(RT.ink)
                                 Image(systemName: "chevron.down")

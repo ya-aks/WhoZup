@@ -259,6 +259,9 @@ struct RTGroup: Identifiable {
     /// For a single alarm, when it rings (or rang): the first occurrence of the
     /// time after it was set. Nil for a repeating alarm.
     let alarmOnceFireDate: Date?
+    /// Rise Report only for things that repeat (repeating alarms, Recurring
+    /// meetups): a one-off Meetup, On the dot or one-time alarm has no history.
+    var hasRiseReport: Bool { type != .event && !alarmOnce }
     /// Set on groups made from the Plans tab.
     var planKind: RTPlanKind? = nil
     /// Repeating plan: when it starts, "HH:mm" (the alarm may ring earlier).

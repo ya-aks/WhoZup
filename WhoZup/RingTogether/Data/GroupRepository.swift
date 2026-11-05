@@ -44,8 +44,13 @@ final class GroupRepository {
 
     static let freeEventLimit = 5
 
+    /// Off while we learn from usage: nothing is limited or sold except tips.
+    /// The event counter still counts. Flip to bring back the free-event limit,
+    /// its banner and the event-pack paywall. See docs/decisions.md.
+    static let pricingEnabled = false
+
     var canCreateEvent: Bool {
-        eventsLifetime || eventsCreatedCount < Self.freeEventLimit || eventPackBalance > 0
+        !Self.pricingEnabled || eventsLifetime || eventsCreatedCount < Self.freeEventLimit || eventPackBalance > 0
     }
 
     /// Events the user can still create — free allowance left plus any purchased

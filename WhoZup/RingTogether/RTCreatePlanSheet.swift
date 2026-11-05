@@ -23,6 +23,8 @@ struct RTCreatePlanSheet: View {
     @State private var days: Set<Int> = [3, 5, 7]
     @State private var hasAlarm = true
     @State private var alarmLead: Int
+    /// The host picked their own lead time instead of a preset.
+    @State private var customLead = false
     @State private var flagNotUp = true
     @State private var everyoneIn = true
     @State private var asks: [String: Bool]
@@ -30,8 +32,10 @@ struct RTCreatePlanSheet: View {
     @State private var createdCode: String?
     @State private var showAddMembers = false
 
-    init(kind: RTPlanKind) {
+    /// `ring`: the "ring everyone's phone?" answer, which a weekly plan's alarm switch starts from.
+    init(kind: RTPlanKind, ring: Bool = true) {
         self.kind = kind
+        _hasAlarm = State(initialValue: ring)
         let cal = Calendar.current
         let tomorrow = cal.date(byAdding: .day, value: 1, to: Date()) ?? Date()
         let hour = kind == .once ? 20 : 6
@@ -163,16 +167,33 @@ struct RTCreatePlanSheet: View {
                     let leads = kind == .repeating ? [0, 30, 60] : [15, 30, 45, 60]
                     HStack(spacing: 6) {
                         ForEach(leads, id: \.self) { lead in
-                            Button { alarmLead = lead } label: {
-                                Text(lead == 0 ? "At start" : lead == 60 ? "1 hr before" : "\(lead) min before")
-                                    .font(.system(size: 12.5, weight: .bold))
-                                    .foregroundStyle(alarmLead == lead ? .white : RT.inkSecondary)
-                                    .frame(maxWidth: .infinity, minHeight: 38)
-                                    .background(RoundedRectangle(cornerRadius: 10).fill(alarmLead == lead ? Color(hex: "#2f7d72") : RT.card))
-                                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(RT.cardBorder, lineWidth: alarmLead == lead ? 0 : 1))
+                            leadChip(lead == 0 ? "At start" : lead == 60 ? "1 hr" : "\(lead) min",
+                                     on: !customLead && alarmLead == lead) {
+                                customLead = false
+                                alarmLead = lead
                             }
-                            .buttonStyle(.plain)
                         }
+                        leadChip("Custom", on: customLead) { customLead = true }
+                    }
+                    if customLead {
+                        // Any lead from right at the start to 4 hours before, in 5-minute steps.
+                        HStack(spacing: 12) {
+                            Button { alarmLead = max(0, alarmLead - 5) } label: {
+                                Image(systemName: "minus").frame(width: 44, height: 40)
+                            }
+                            .accessibilityLabel("5 minutes less")
+                            Text(Self.leadLabel(alarmLead))
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundStyle(Color(hex: "#1f5a50"))
+                                .frame(maxWidth: .infinity)
+                            Button { alarmLead = min(240, alarmLead + 5) } label: {
+                                Image(systemName: "plus").frame(width: 44, height: 40)
+                            }
+                            .accessibilityLabel("5 minutes more")
+                        }
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Color(hex: "#2f7d72"))
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color(hex: "#e3f1ee")))
                     }
                     Text(kind == .repeating
                          ? "Rings \(RTAlarmTime.display(RTAlarmTime.string(from: alarmAt))) for whoever's in that day. Skip a session and your alarm stays quiet."
@@ -310,6 +331,27 @@ struct RTCreatePlanSheet: View {
     // MARK: Helpers
 
     /// When everyone's alarm rings: the start minus the lead.
+    private func leadChip(_ label: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 12.5, weight: .bold))
+                .lineLimit(1).minimumScaleFactor(0.8)
+                .foregroundStyle(on ? .white : RT.inkSecondary)
+                .frame(maxWidth: .infinity, minHeight: 38)
+                .background(RoundedRectangle(cornerRadius: 10).fill(on ? Color(hex: "#2f7d72") : RT.card))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(RT.cardBorder, lineWidth: on ? 0 : 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// "At start", "50 min before", "1 hr 15 min before".
+    static func leadLabel(_ minutes: Int) -> String {
+        if minutes == 0 { return "At start" }
+        let h = minutes / 60, m = minutes % 60
+        let text = h == 0 ? "\(m) min" : (m == 0 ? "\(h) hr" : "\(h) hr \(m) min")
+        return text + " before"
+    }
+
     private var alarmAt: Date { start.addingTimeInterval(TimeInterval(-alarmLead * 60)) }
 
     private var canCreate: Bool {

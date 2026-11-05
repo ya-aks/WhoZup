@@ -291,8 +291,10 @@ struct RTGroupDetailView: View {
 
     @ViewBuilder private func actionRow(_ group: RTGroup) -> some View {
         HStack(spacing: 10) {
-            secondaryButton("Rise Report", icon: "chart.bar", accent: group.type.accent) {
-                showDashboard = true
+            if group.hasRiseReport {
+                secondaryButton("Rise Report", icon: "chart.bar", accent: group.type.accent) {
+                    showDashboard = true
+                }
             }
             if group.isCurrentUserAdmin {
                 secondaryButton("Manage members", icon: "person.2", accent: group.type.accent) {

@@ -23,9 +23,9 @@ enum RTPlanKind: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .once: return "Meetup"
-        case .onceAlarm: return "On the dot"
-        case .repeating: return "Recurring meetup"
+        case .once: return "Just once"
+        case .onceAlarm: return "Once · phones ring"
+        case .repeating: return "Every week"
         }
     }
 
@@ -34,9 +34,7 @@ enum RTPlanKind: String, CaseIterable, Identifiable {
     /// The create form's heading.
     var formTitle: String {
         switch self {
-        case .once: return "New meetup"
-        case .onceAlarm: return "New on-the-dot plan"
-        case .repeating: return "New recurring meetup"
+        case .once, .onceAlarm, .repeating: return "New plan"
         }
     }
 
@@ -81,67 +79,102 @@ enum RTPlanKind: String, CaseIterable, Identifiable {
     }
 }
 
-/// "What are you planning?" — the first step of a new plan.
+/// The first step of a new plan: two quick questions instead of picking a
+/// type. How often (just once / every week) and whether everyone's phone rings
+/// before it starts map onto the three kinds; for a weekly plan the answer to
+/// the second question seeds its alarm switch.
 struct RTPlanKindSheet: View {
-    var onPick: (RTPlanKind) -> Void
+    /// The kind, and whether everyone's phone should ring.
+    var onPick: (RTPlanKind, Bool) -> Void
     @Environment(\.dismiss) private var dismiss
+    @State private var weekly: Bool?
+    @State private var ring: Bool?
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Button("Cancel") { dismiss() }
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(RT.inkMuted)
                     Spacer()
                 }
-                Text("What are you planning?")
+                Text("New plan")
                     .font(.rtDisplay(26, .bold))
                     .foregroundStyle(RT.ink)
                     .padding(.top, 8)
 
-                ForEach(RTPlanKind.allCases) { kind in
-                    Button {
-                        dismiss()
-                        // Let this sheet finish closing before the form opens.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { onPick(kind) }
-                    } label: {
-                        HStack(alignment: .top, spacing: 14) {
-                            Image(systemName: kind.symbol)
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundStyle(kind.tint)
-                                .frame(width: 48, height: 48)
-                                .background(RoundedRectangle(cornerRadius: 14).fill(kind.tintBackground))
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(kind.title)
-                                    .font(.system(size: 18, weight: .bold))
-                                    .foregroundStyle(RT.ink)
-                                Text(kind.tagline)
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(kind.tint)
-                                Text(kind.blurb)
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundStyle(RT.inkMuted)
-                                    .multilineTextAlignment(.leading)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
-                            Spacer(minLength: 0)
-                        }
-                        .padding(18)
-                        .background(RoundedRectangle(cornerRadius: 20).fill(RT.card))
-                        .overlay(RoundedRectangle(cornerRadius: 20).stroke(RT.cardBorder, lineWidth: 1))
-                    }
-                    .buttonStyle(RTPressStyle())
+                question("1 · HOW OFTEN?", tint: Color(hex: "#9a5d1c"))
+                option("Just once", "A dinner, a trip, a study session", symbol: "calendar",
+                       tint: Color(hex: "#9a5d1c"), bg: Color(hex: "#fbeed6"), on: weekly == false) { weekly = false }
+                option("Every week", "A morning run, a class, a weekly game", symbol: "arrow.triangle.2.circlepath",
+                       tint: Color(hex: "#3f6fa3"), bg: Color(hex: "#e4eef5"), on: weekly == true) { weekly = true }
+
+                question("2 · RING EVERYONE'S PHONE BEFORE IT STARTS?", tint: Color(hex: "#2f7d72"))
+                    .padding(.top, 8)
+                option("Yes, ring everyone", "Nobody misses it, and you see who's ready", symbol: "alarm.fill",
+                       tint: Color(hex: "#2f7d72"), bg: Color(hex: "#e3f1ee"), on: ring == true) { ring = true }
+                option("No, just RSVPs", "People say if they're coming, running late or can't", symbol: "checkmark",
+                       tint: RT.inkMuted, bg: RT.cardBorder, on: ring == false) { ring = false }
+
+                Button {
+                    guard let weekly, let ring else { return }
+                    let kind: RTPlanKind = weekly ? .repeating : (ring ? .onceAlarm : .once)
+                    dismiss()
+                    // Let this sheet finish closing before the form opens.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { onPick(kind, ring) }
+                } label: {
+                    Text("Continue")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .background(RoundedRectangle(cornerRadius: 16)
+                            .fill(weekly != nil && ring != nil ? Color(hex: "#9a5d1c") : RT.inkFaint))
                 }
+                .buttonStyle(RTPressStyle())
+                .disabled(weekly == nil || ring == nil)
+                .padding(.top, 10)
 
                 Text("Just waking yourself up? That's an Alarm.")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(RT.inkMuted)
                     .frame(maxWidth: .infinity)
-                    .padding(.top, 10)
+                    .padding(.top, 6)
             }
             .padding(20)
         }
         .background(RT.canvas)
+    }
+
+    private func question(_ text: String, tint: Color) -> some View {
+        Text(text).font(.system(size: 13, weight: .heavy)).tracking(0.5).foregroundStyle(tint)
+    }
+
+    private func option(_ title: String, _ sub: String, symbol: String, tint: Color, bg: Color,
+                        on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                Image(systemName: symbol)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(tint)
+                    .frame(width: 44, height: 44)
+                    .background(RoundedRectangle(cornerRadius: 13).fill(bg))
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title).font(.system(size: 17, weight: .bold)).foregroundStyle(RT.ink)
+                    Text(sub).font(.system(size: 13, weight: .medium)).foregroundStyle(RT.inkMuted)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+                Circle()
+                    .strokeBorder(on ? tint : RT.cardBorder, lineWidth: 2)
+                    .frame(width: 22, height: 22)
+                    .overlay(Circle().fill(tint).frame(width: 10, height: 10).opacity(on ? 1 : 0))
+            }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 18).fill(RT.card))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(on ? tint : RT.cardBorder, lineWidth: on ? 2 : 1))
+        }
+        .buttonStyle(RTPressStyle())
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }

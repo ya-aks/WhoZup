@@ -35,6 +35,8 @@ struct RTGroupListView: View {
     @State private var showKindPicker = false
     /// The plan kind picked for the create form (Plans tab).
     @State private var createKind: RTPlanKind?
+    /// The second quick question's answer; seeds a weekly plan's alarm switch.
+    @State private var createRing = true
 
     private var groups: [RTGroup] {
         plans ? repository.groups(of: .shared) + repository.groups(of: .event) : repository.groups(of: type)
@@ -93,7 +95,7 @@ struct RTGroupListView: View {
                         .padding(.top, 4)
 
                     // Plans: no purchase banner for now (pricing is being reworked).
-                    if !plans && type == .event {
+                    if GroupRepository.pricingEnabled && !plans && type == .event {
                         RTFreeEventsBanner(remaining: repository.eventsRemaining) {
                             // Buying from the banner offers the same choice —
                             // event pack or the lifetime unlock — via the paywall.
@@ -252,10 +254,11 @@ struct RTGroupListView: View {
         // Keyed on the picked kind so the form is built with it; an isPresented
         // sheet read a stale nil kind on first open and showed the event form.
         .sheet(item: $createKind) { kind in
-            RTCreatePlanSheet(kind: kind)
+            RTCreatePlanSheet(kind: kind, ring: createRing)
         }
         .sheet(isPresented: $showKindPicker) {
-            RTPlanKindSheet { kind in
+            RTPlanKindSheet { kind, ring in
+                createRing = ring
                 // No event paywall on Plans for now (pricing is being reworked).
                 createKind = kind
             }
@@ -402,7 +405,7 @@ struct RTEmptyState: View {
     var plans = false
 
     private var message: String {
-        if plans { return "No plans yet. Tap ＋ to start a meetup." }
+        if plans { return "No plans yet. Tap ＋ to start one." }
         switch type {
         case .accountability: return "No alarm groups yet. Create one and invite friends to keep each other on time."
         case .shared: return "No In Sync groups yet. Create one common alarm for the whole crew."

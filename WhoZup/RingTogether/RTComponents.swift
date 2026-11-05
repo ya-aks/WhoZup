@@ -214,7 +214,13 @@ struct RTGroupPulse: View {
     private static let snoozeColor = Color(hex: "#d98c3a")
     private static let silentColor = Color(hex: "#b9b2a5")
 
-    private var up: Int { roster.filter { $0.status == .wokeUp || $0.status == .runningLate }.count }
+    /// Up but their habit's window closed with steps undone: its own bucket,
+    /// in the light red the group screen uses for missed steps.
+    private static func missedHabit(_ m: RTMember) -> Bool {
+        (m.status == .wokeUp || m.status == .runningLate) && m.routine?.isMissed() == true
+    }
+    private var up: Int { roster.filter { ($0.status == .wokeUp || $0.status == .runningLate) && !Self.missedHabit($0) }.count }
+    private var missedHabits: Int { roster.filter(Self.missedHabit).count }
     private var snoozed: Int { roster.filter { $0.status == .snoozed }.count }
     private var silent: Int { roster.filter { $0.status == .silentLate }.count }
 
@@ -222,10 +228,11 @@ struct RTGroupPulse: View {
     private var faces: [RTMember] {
         func rank(_ m: RTMember) -> Int {
             if m.isYou { return 0 }
+            if Self.missedHabit(m) { return 4 }
             switch m.status {
             case .silentLate: return 1
             case .snoozed: return 2
-            case .wokeUp, .runningLate: return 4
+            case .wokeUp, .runningLate: return 5
             default: return 3
             }
         }
@@ -243,7 +250,7 @@ struct RTGroupPulse: View {
                             .foregroundStyle(.white)
                             .frame(width: 30, height: 30)
                             .background(Circle().fill(member.displayAvatarColor))
-                            .overlay(Circle().stroke(ring(member.status), lineWidth: 2))
+                            .overlay(Circle().stroke(Self.missedHabit(member) ? RT.stepMissed : ring(member.status), lineWidth: 2))
                             .overlay(Circle().stroke(RT.card, lineWidth: 2).padding(-2))
                             .accessibilityLabel("\(member.isYou ? "You" : member.name), \(member.status.label)")
                             .zIndex(Double(faces.count - index))
@@ -263,9 +270,10 @@ struct RTGroupPulse: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(RT.inkMuted)
             }
-            if up + snoozed + silent > 0 {
+            if up + missedHabits + snoozed + silent > 0 {
                 HStack(spacing: 12) {
                     if up > 0 { count(up, "up", Self.upColor) }
+                    if missedHabits > 0 { count(missedHabits, "missed habit", RT.stepMissed) }
                     if snoozed > 0 { count(snoozed, "snoozed", Self.snoozeColor) }
                     if silent > 0 { count(silent, "no response", Self.silentColor) }
                 }

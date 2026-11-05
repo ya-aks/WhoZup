@@ -145,7 +145,7 @@ final class GroupRepository {
     /// first time we see it's missing. After that it only ever increments.
     private func seedUsageIfNeeded() {
         guard usageLoaded, !usageDocExists, !seedingUsage, let uid = currentUid else { return }
-        let hosted = groups.filter { $0.type == .event && $0.hostedByCurrentUser }.count
+        let hosted = groups.filter { $0.type == .event && $0.planKind == nil && $0.hostedByCurrentUser }.count
         guard hosted > 0 else { return }
         seedingUsage = true
         Task {
@@ -490,10 +490,12 @@ final class GroupRepository {
         let once = type == .shared ? (g.alarmOnce ?? false)
             : (type == .accountability && myDoc?.alarmOnce == true)
         let onceSetAt = (type == .accountability ? myDoc?.alarmSetAt : g.alarmSetAt)?.dateValue() ?? Date()
-        // A plan's one-time alarm rings on its chosen date, not "the next 06:30".
+        // A plan's one-time alarm rings on its chosen date, not "the next 06:30" —
+        // unless an older build re-set the alarm since (its `alarmSetAt` is then
+        // past that date's anchor), when the next occurrence is what's meant.
         let onceFire: Date? = {
             guard once, !displayAlarm.isEmpty else { return nil }
-            if let day = g.onceDate, let date = Self.date(day: day, time: displayAlarm) { return date }
+            if let day = g.onceDate, let date = Self.date(day: day, time: displayAlarm), onceSetAt < date { return date }
             return Self.firstOccurrence(of: displayAlarm, after: onceSetAt)
         }()
 
@@ -685,9 +687,12 @@ final class GroupRepository {
             // Creating an event consumes one of the free-event quota. Monotonic:
             // a later delete never gives it back, so the count can be trusted for
             // billing once the free 5 are used up.
+            // A one-time plan is stored as an event but isn't one of the paid
+            // events; it adds 0, which still creates the usage doc so older
+            // builds don't seed the counter from hosted events (plans included).
             if type == .event {
                 try? await db.collection("usage").document(uid)
-                    .setData(["eventsCreated": FieldValue.increment(Int64(1))], merge: true)
+                    .setData(["eventsCreated": FieldValue.increment(Int64(planFields.isEmpty ? 1 : 0))], merge: true)
             }
             return code
         } catch {
@@ -878,7 +883,7 @@ final class GroupRepository {
     /// from it when the group is same-moment; the zone is written either way so
     /// that switching the anchor later has something to convert from.
     func setGroupAlarm(groupId: String, time: String, anchor: RTAlarmAnchor, days: [Int] = [], once: Bool = false) async {
-        let fields: [String: Any] = [
+        var fields: [String: Any] = [
             "alarmTime": time,
             "alarmTimeZone": TimeZone.current.identifier,
             "alarmAnchor": anchor.rawValue,
@@ -886,6 +891,10 @@ final class GroupRepository {
             "alarmOnce": once,
             "alarmSetAt": FieldValue.serverTimestamp(),
         ]
+        // A dated plan alarm keeps its date for older builds too.
+        if once, let day = rawGroups[groupId]?.onceDate, let alarmAt = Self.date(day: day, time: time) {
+            fields["alarmSetAt"] = Timestamp(date: Self.onceAnchor(alarmAt))
+        }
         do {
             try await db.collection("groups").document(groupId).updateData(fields)
             await refreshInvitePreview(groupId: groupId, fields: fields)
@@ -1279,6 +1288,10 @@ final class GroupRepository {
             let alarmAt = start.addingTimeInterval(TimeInterval(-alarmLeadMinutes * 60))
             fields["meetAt"] = Timestamp(date: start)
             fields["onceDate"] = Self.dayKey(alarmAt)
+            // Older builds ring a one-time alarm at the first occurrence of its
+            // time after `alarmSetAt`; anchoring it just before the real alarm
+            // makes them ring on the plan's date too (and not mark misses before).
+            fields["alarmSetAt"] = Timestamp(date: Self.onceAnchor(alarmAt))
             fields["alarmLeadMinutes"] = alarmLeadMinutes
             if let flagNotUpMinutes { fields["flagNotUpMinutes"] = flagNotUpMinutes }
             return await createGroup(type: .shared, name: name, alarmTime: RTAlarmTime.string(from: alarmAt),
@@ -1304,6 +1317,11 @@ final class GroupRepository {
                                      alarmDays: alarmDays, alarmOnce: false, planFields: fields)
         }
     }
+
+    /// `alarmSetAt` for a plan's dated one-time alarm: a minute before it rings,
+    /// so "the first occurrence after alarmSetAt" (how older builds schedule it)
+    /// is the plan's date.
+    static func onceAnchor(_ alarmAt: Date) -> Date { alarmAt.addingTimeInterval(-60) }
 
     private static func firstOccurrence(of time: String, after date: Date) -> Date? {
         let parts = time.split(separator: ":")

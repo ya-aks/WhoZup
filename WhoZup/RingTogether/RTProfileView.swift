@@ -271,6 +271,32 @@ struct RTProfileView: View {
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(RT.cardBorder, lineWidth: 1))
     }
 
+    /// The Unlimited events purchase row. Off for now; the purchase code stays.
+    static let showUnlimitedEvents = false
+
+    @ViewBuilder private var unlimitedEventsRow: some View {
+        Divider().overlay(RT.divider)
+        if repository.eventsLifetime {
+            settingRowContent("Unlimited events", trailing: "Active ✓")
+        } else if let lifetime = eventPackStore.lifetimeProduct {
+            // Only offer the purchase when the real StoreKit product loaded —
+            // never a fallback price behind a button that can't complete.
+            Button {
+                Task { _ = await eventPackStore.purchaseLifetime() }
+            } label: {
+                settingRowContent(
+                    "Unlimited events",
+                    trailing: eventPackStore.isPurchasing ? "Purchasing…" : lifetime.displayPrice
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(eventPackStore.isPurchasing)
+        } else {
+            // Product not available (not configured/approved, or offline).
+            settingRowContent("Unlimited events", trailing: "Unavailable")
+        }
+    }
+
     private var settings: some View {
         VStack(spacing: 0) {
             Button { showDashboard = true } label: {
@@ -280,26 +306,8 @@ struct RTProfileView: View {
             .sheet(isPresented: $showDashboard) {
                 RTDashboardView(groupId: nil)
             }
-            Divider().overlay(RT.divider)
-            if repository.eventsLifetime {
-                settingRowContent("Unlimited events", trailing: "Active ✓")
-            } else if let lifetime = eventPackStore.lifetimeProduct {
-                // Only offer the purchase when the real StoreKit product loaded —
-                // never a fallback price behind a button that can't complete.
-                Button {
-                    Task { _ = await eventPackStore.purchaseLifetime() }
-                } label: {
-                    settingRowContent(
-                        "Unlimited events",
-                        trailing: eventPackStore.isPurchasing ? "Purchasing…" : lifetime.displayPrice
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(eventPackStore.isPurchasing)
-            } else {
-                // Product not available (not configured/approved, or offline).
-                settingRowContent("Unlimited events", trailing: "Unavailable")
-            }
+            // Hidden while pricing is reworked (docs/pricing.md); flip the flag to bring it back.
+            if Self.showUnlimitedEvents { unlimitedEventsRow }
             Divider().overlay(RT.divider)
             ShareLink(item: URL(string: appLink)!, message: Text("Try whoZup with me — we keep each other on time.")) {
                 settingRowContent("Invite friends", trailing: "Share app ›")

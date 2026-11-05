@@ -205,8 +205,8 @@ struct RTAlarmGroupCard: View {
 }
 
 /// Who's up in a group at a glance, at any size: a few faces (you, then
-/// whoever isn't up yet) ringed by status with a +N, a proportional bar, and
-/// colour-keyed counts. Before anyone's alarm has rung it's just the faces.
+/// whoever isn't up yet) ringed by status with a +N, and colour-keyed counts
+/// (no bar: it read as progress). Before anyone's alarm has rung it's just the faces.
 struct RTGroupPulse: View {
     let roster: [RTMember]
 
@@ -264,23 +264,6 @@ struct RTGroupPulse: View {
                     .foregroundStyle(RT.inkMuted)
             }
             if up + snoozed + silent > 0 {
-                GeometryReader { geo in
-                    let total = CGFloat(max(1, roster.count))
-                    let parts: [(Int, Color)] = [(up, Self.upColor), (snoozed, Self.snoozeColor),
-                                                 (silent, Self.silentColor),
-                                                 (roster.count - up - snoozed - silent, Color(hex: "#e6dfd0"))]
-                    let shown = parts.filter { $0.0 > 0 }
-                    let spacing = CGFloat(max(0, shown.count - 1)) * 2
-                    HStack(spacing: 2) {
-                        ForEach(shown.indices, id: \.self) { i in
-                            Rectangle().fill(shown[i].1)
-                                .frame(width: max(4, (geo.size.width - spacing) * CGFloat(shown[i].0) / total))
-                        }
-                    }
-                }
-                .frame(height: 6)
-                .clipShape(Capsule())
-                .accessibilityHidden(true)
                 HStack(spacing: 12) {
                     if up > 0 { count(up, "up", Self.upColor) }
                     if snoozed > 0 { count(snoozed, "snoozed", Self.snoozeColor) }

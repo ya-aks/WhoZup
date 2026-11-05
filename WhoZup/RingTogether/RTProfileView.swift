@@ -2,7 +2,7 @@
 //  RTProfileView.swift
 //  WhoZup
 //
-//  The "More" tab: profile header, a rhythm strip and stat tiles computed from
+//  The "More" tab: profile header and stat tiles computed from
 //  the user's live groups, and settings rows. Sign out is wired to the real
 //  AuthManager; "Invite friends" shares the app link; "Leave a tip" opens the
 //  tip sheet.
@@ -90,9 +90,7 @@ struct RTProfileView: View {
 
                 header.padding(.top, 18)
 
-                rhythmCard.padding(.top, 22)
-
-                statGrid.padding(.top, 14)
+                statGrid.padding(.top, 22)
 
                 Text("Just your own patterns — no scores, no leaderboards.")
                     .font(.system(size: 13, weight: .medium))
@@ -153,97 +151,6 @@ struct RTProfileView: View {
                     .padding(.top, 1)
             }
             Spacer()
-        }
-    }
-
-    private var rhythmCard: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Your rhythm")
-                    .font(.rtDisplay(17, .bold))
-                    .foregroundStyle(RT.ink)
-                Spacer()
-                Text("today · alarm groups")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(RT.inkFaint)
-            }
-
-            if alarmGroups.isEmpty {
-                Text("Join or create an alarm group to start building your rhythm.")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(RT.inkMuted)
-                    .padding(.top, 14)
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 16) {
-                        ForEach(alarmGroups) { group in
-                            VStack(spacing: 6) {
-                                statusDot(myStatus(in: group), size: 16)
-                                Text(groupInitials(group.name))
-                                    .font(.system(size: 12, weight: .bold))
-                                    .foregroundStyle(RT.inkMuted)
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
-                    .padding(.top, 16)
-                    .padding(.trailing, 2)
-                }
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 14) {
-                        legend(RT.dotOnTime, "On time")
-                        legend(RT.dotSnoozed, "Snoozed")
-                        legend(RT.dotLate, "Late")
-                        legend(RT.inkFaint, "Not completed", filled: false)
-                    }
-                    .padding(.trailing, 2)
-                }
-                .padding(.top, 14)
-            }
-        }
-        .padding(18)
-        .background(RoundedRectangle(cornerRadius: 20).fill(RT.card))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(RT.cardBorder, lineWidth: 1))
-    }
-
-    /// Initials from every word of the group name (e.g. "Morning Warriors" → "MW"),
-    /// capped at three letters so the strip stays tidy. Falls back to the first
-    /// character for single-word or symbol-only names.
-    private func groupInitials(_ name: String) -> String {
-        let words = name.split { $0 == " " || $0 == "-" || $0 == "_" || $0 == "/" }
-        let letters = words.prefix(3).compactMap(\.first).map { String($0).uppercased() }
-        return letters.isEmpty ? String(name.prefix(1)).uppercased() : letters.joined()
-    }
-
-    /// The alarm hasn't been answered yet — no wake-up, snooze, or late signal recorded.
-    private func isNotCompleted(_ status: RTStatus) -> Bool {
-        status == .waiting || status == .noResponse
-    }
-
-    /// Filled dot for a recorded status; a hollow (outlined) dot for "not completed"
-    /// so an unanswered alarm reads as clearly different from a real result.
-    @ViewBuilder
-    private func statusDot(_ status: RTStatus, size: CGFloat) -> some View {
-        if isNotCompleted(status) {
-            Circle().strokeBorder(RT.inkFaint, lineWidth: 2).frame(width: size, height: size)
-        } else {
-            Circle().fill(status.chipColor).frame(width: size, height: size)
-        }
-    }
-
-    private func legend(_ color: Color, _ label: String, filled: Bool = true) -> some View {
-        HStack(spacing: 6) {
-            Group {
-                if filled {
-                    Circle().fill(color).frame(width: 8, height: 8)
-                } else {
-                    Circle().strokeBorder(color, lineWidth: 1.5).frame(width: 8, height: 8)
-                }
-            }
-            Text(label)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(RT.inkSecondary)
         }
     }
 

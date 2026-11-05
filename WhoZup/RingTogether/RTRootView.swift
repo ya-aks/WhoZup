@@ -88,11 +88,16 @@ struct RTRootView: View {
                 )
             }
         }
-        .task(id: authManager.user?.uid) {
+        // Keyed on the name too: a new user types it after signing in, and the
+        // groups they create or join next must carry it, not "You".
+        .task(id: "\(authManager.user?.uid ?? "")|\(authManager.firstName)|\(authManager.lastName)") {
             if let user = authManager.user {
+                let typed = [authManager.firstName, authManager.lastName]
+                    .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.joined(separator: " ")
                 repository.start(
                     uid: user.uid,
-                    displayName: user.displayName
+                    displayName: (typed.isEmpty ? nil : typed)
+                        ?? user.displayName
                         ?? user.email.map { String($0.split(separator: "@")[0]) }
                         ?? "You"
                 )

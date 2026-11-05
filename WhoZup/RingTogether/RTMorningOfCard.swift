@@ -34,7 +34,12 @@ struct RTMorningOfCard: View {
 
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 6) {
-                stage("CONFIRMED", "\(expected.count) coming", done: true)
+                // Who actually said yes, matching the headcount below; anyone
+                // who hasn't answered is still expected up but isn't confirmed.
+                let confirmed = group.roster.filter {
+                    let a = session.answer(for: $0.uid); return a == .coming || a == .runningLate
+                }.count
+                stage("CONFIRMED", "\(confirmed) coming", done: true)
                 stage(time(alarmAt), now >= alarmAt ? "Alarms rang" : "Alarms ring", done: now >= alarmAt)
                 stage(time(session.start), startLabel(now: now), done: false, current: true)
             }

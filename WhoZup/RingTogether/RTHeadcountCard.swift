@@ -31,6 +31,19 @@ struct RTHeadcount {
     var invited: Int { coming + late + cant + waiting }
     var yes: Int { coming + late }
 
+    /// Who an ask to `audience` actually reaches. Mirrors the server's
+    /// `audienceFor`: never the person asking, never anyone who can't make it.
+    func recipients(_ audience: String) -> Int {
+        people.filter { person in
+            guard !person.member.isYou else { return false }
+            switch audience {
+            case "unanswered": return person.bucket == .waiting
+            case "yes": return person.bucket == .coming || person.bucket == .late
+            default: return person.bucket != .cant
+            }
+        }.count
+    }
+
     func count(_ bucket: Bucket) -> Int {
         switch bucket {
         case .coming: return coming
@@ -251,9 +264,9 @@ struct RTAskNowSheet: View {
             Text("Ask for a headcount").font(.rtDisplay(22, .bold)).foregroundStyle(RT.ink)
 
             Text("Ask").font(.system(size: 13, weight: .bold)).foregroundStyle(RT.inkMuted)
-            option("unanswered", "People who haven't answered", headcount.waiting)
-            option("yes", "Everyone who said yes", headcount.yes)
-            option("everyone", "Everyone", headcount.invited)
+            option("unanswered", "People who haven't answered", headcount.recipients("unanswered"))
+            option("yes", "Everyone who said yes", headcount.recipients("yes"))
+            option("everyone", "Everyone", headcount.recipients("everyone"))
 
             Text("Question").font(.system(size: 13, weight: .bold)).foregroundStyle(RT.inkMuted)
             HStack(spacing: 8) {
@@ -297,9 +310,7 @@ struct RTAskNowSheet: View {
 
     private var count: Int {
         switch audience {
-        case "unanswered": return headcount.waiting
-        case "yes": return headcount.yes
-        default: return headcount.invited
+        default: return headcount.recipients(audience)
         }
     }
 
@@ -411,13 +422,14 @@ struct RTHeadcountPeopleSheet: View {
                     }
                 }
             }
-            if tab == .waiting && !people.isEmpty {
+            let askable = headcount.recipients("unanswered")
+            if tab == .waiting && askable > 0 {
                 Button {
                     repository.askNow(groupId: groupId, sessionKey: sessionKey, audience: "unanswered",
                                       question: "Can you make it?", note: "")
                     dismiss()
                 } label: {
-                    Text("Ask these \(people.count) again")
+                    Text("Ask these \(askable) again")
                         .font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
                         .frame(maxWidth: .infinity, minHeight: 48)
                         .background(RoundedRectangle(cornerRadius: 14).fill(Color(hex: "#9a5d1c")))

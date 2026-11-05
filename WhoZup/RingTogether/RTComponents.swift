@@ -194,7 +194,7 @@ struct RTAlarmGroupCard: View {
                 }
             }
             RTRoutinePendingPill(group: group)
-            RTGroupPulse(roster: group.roster, fallback: group.memberLabel)
+            RTGroupPulse(roster: group.roster)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -209,7 +209,6 @@ struct RTAlarmGroupCard: View {
 /// colour-keyed counts. Before anyone's alarm has rung it's just the faces.
 struct RTGroupPulse: View {
     let roster: [RTMember]
-    let fallback: String
 
     private static let upColor = RT.dotOnTime
     private static let snoozeColor = Color(hex: "#d98c3a")
@@ -237,7 +236,8 @@ struct RTGroupPulse: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
                 HStack(spacing: -8) {
-                    ForEach(faces) { member in
+                    // Earlier faces sit on top, so "YOU" and the not-up people read whole.
+                    ForEach(Array(faces.enumerated()), id: \.element.id) { index, member in
                         Text(member.isYou ? "YOU" : member.initials)
                             .font(.system(size: member.isYou ? 9 : 11, weight: .heavy))
                             .foregroundStyle(.white)
@@ -246,6 +246,7 @@ struct RTGroupPulse: View {
                             .overlay(Circle().stroke(ring(member.status), lineWidth: 2))
                             .overlay(Circle().stroke(RT.card, lineWidth: 2).padding(-2))
                             .accessibilityLabel("\(member.isYou ? "You" : member.name), \(member.status.label)")
+                            .zIndex(Double(faces.count - index))
                     }
                     if roster.count > faces.count {
                         Text("+\(roster.count - faces.count)")
@@ -285,10 +286,6 @@ struct RTGroupPulse: View {
                     if snoozed > 0 { count(snoozed, "snoozed", Self.snoozeColor) }
                     if silent > 0 { count(silent, "no response", Self.silentColor) }
                 }
-            } else {
-                Text(fallback)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(RT.inkMuted)
             }
         }
         .padding(.top, 2)

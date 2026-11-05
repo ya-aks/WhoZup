@@ -159,8 +159,29 @@ enum FirebaseBootstrap {
         let firestore = Firestore.firestore()
         let settings = firestore.settings
         settings.cacheSettings = PersistentCacheSettings()
+        #if DEBUG
+        // Local testing against the Firebase emulators, never prod (debug only).
+        if let host = emulatorHost {
+            Auth.auth().useEmulator(withHost: host, port: 9099)
+            settings.host = "\(host):8080"
+            settings.isSSLEnabled = false
+            settings.cacheSettings = MemoryCacheSettings()
+        }
+        #endif
         firestore.settings = settings
     }
+
+    #if DEBUG
+    /// Set by launching with `WHOZUP_EMULATOR_HOST=127.0.0.1` (remembered, so
+    /// intents and background tasks use it too); `WHOZUP_EMULATOR_HOST=off` clears it.
+    private static var emulatorHost: String? {
+        let key = "debug.emulatorHost"
+        if let env = ProcessInfo.processInfo.environment["WHOZUP_EMULATOR_HOST"] {
+            UserDefaults.standard.set(env == "off" ? nil : env, forKey: key)
+        }
+        return UserDefaults.standard.string(forKey: key)
+    }
+    #endif
 }
 
 // MARK: - Action handler

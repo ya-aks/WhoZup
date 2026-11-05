@@ -183,7 +183,7 @@ struct RTCreatePlanSheet: View {
                         Divider().overlay(RT.divider)
                         Toggle(isOn: $flagNotUp) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("Flag anyone not up by \(RTAlarmTime.display(RTAlarmTime.string(from: alarmAt.addingTimeInterval(15 * 60)))))")
+                                Text("Flag anyone not up by \(RTAlarmTime.display(RTAlarmTime.string(from: alarmAt.addingTimeInterval(15 * 60))))")
                                     .font(.system(size: 14, weight: .semibold))
                                     .foregroundStyle(RT.ink)
                                 Text("The group sees who to nudge before you leave.")

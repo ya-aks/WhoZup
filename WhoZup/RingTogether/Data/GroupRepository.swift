@@ -97,7 +97,11 @@ final class GroupRepository {
     /// Begins listening for the given user's groups. Safe to call again with a
     /// new uid (e.g. after re-auth) — it resets first.
     func start(uid: String, displayName: String) {
-        if currentUid == uid { currentDisplayName = displayName; return }
+        if currentUid == uid {
+            currentDisplayName = displayName
+            members.keys.forEach { healPlaceholderName(groupId: $0) }
+            return
+        }
         stop()
         currentUid = uid
         currentDisplayName = displayName
@@ -184,6 +188,21 @@ final class GroupRepository {
         rebuild()
     }
 
+    /// Names written before the user had typed theirs (a brand-new user who
+    /// created or joined a group in their first session) read "You" to
+    /// everyone else. Replace that placeholder on our own member doc once the
+    /// real name is known. Only ever touches our own doc, and only a placeholder.
+    private func healPlaceholderName(groupId gid: String) {
+        guard let uid = currentUid, !Self.placeholderNames.contains(currentDisplayName),
+              let mine = members[gid]?.first(where: { $0.id == uid }),
+              Self.placeholderNames.contains(mine.displayName) else { return }
+        let initials = String(currentDisplayName.prefix(1)).uppercased()
+        db.collection("groups").document(gid).collection("members").document(uid)
+            .updateData(["displayName": currentDisplayName, "initials": initials.isEmpty ? "?" : initials])
+    }
+
+    private static let placeholderNames: Set<String> = ["You", "Member", ""]
+
     private func attachSubListeners(groupId gid: String) {
         if memberListeners[gid] == nil {
             memberListeners[gid] = db.collection("groups").document(gid).collection("members")
@@ -195,6 +214,7 @@ final class GroupRepository {
                         if self.members[gid]?.contains(where: { $0.id == self.currentUid }) == true {
                             self.pendingOwnMember[gid] = nil
                         }
+                        self.healPlaceholderName(groupId: gid)
                         self.rebuild()
                     }
                 }

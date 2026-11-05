@@ -112,7 +112,7 @@ struct RTGroupDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
-                    RTBadge(text: group.type == .accountability ? "Alarms" : "In Sync",
+                    RTBadge(text: group.planKind != nil ? "Plan" : (group.type == .accountability ? "Alarms" : "In Sync"),
                             color: group.type.eyebrow,
                             background: group.type.badgeBackground)
                     if group.isCurrentUserAdmin {

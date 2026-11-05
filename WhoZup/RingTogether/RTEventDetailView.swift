@@ -174,16 +174,17 @@ struct RTEventDetailView: View {
     @ViewBuilder private func content(_ group: RTGroup) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                RTBadge(text: "Event", color: RTGroupType.event.eyebrow, background: RTGroupType.event.badgeBackground)
+                RTBadge(text: group.planKind != nil ? "Plan" : "Event", color: RTGroupType.event.eyebrow, background: RTGroupType.event.badgeBackground)
 
                 Text(group.name)
                     .font(.rtDisplay(30, .bold))
                     .foregroundStyle(RT.ink)
                     .padding(.top, 10)
 
+                let noun = group.planKind != nil ? "plan" : "event"
                 Text(isCompleted
-                     ? "Event ended · view only"
-                     : (isAdmin ? "Active event · you're admin" : "Active event"))
+                     ? "\(noun.capitalized) ended · view only"
+                     : (isAdmin ? "Active \(noun) · you're admin" : "Active \(noun)"))
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(RT.inkMuted)
                     .padding(.top, 2)

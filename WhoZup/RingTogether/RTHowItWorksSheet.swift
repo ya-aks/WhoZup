@@ -85,10 +85,10 @@ struct RTWalkStep: Identifiable {
               caption: "Skip a date and your alarm stays quiet that day. A skip never counts as missed.",
               screenType: .planSkip),
         .init(id: 3, title: "Headcount, asked for you",
-              caption: "The host picks when to ask. We ask the right people at those moments, and the host can Ask now any time.",
+              caption: "The host picks when to ask. We ask the right people at those moments, and the host can Ask now any time. Tap any count to see who.",
               screenType: .planHeadcount),
         .init(id: 4, title: "With an alarm: who's up",
-              caption: "Everyone's phone rings before it starts. See who's up, and nudge anyone who isn't.",
+              caption: "Everyone's phone rings before it starts. Everyone sees who's up; only the host can nudge the ones who aren't.",
               screenType: .planMorning),
         .init(id: 5, title: "Who shows up",
               caption: "Rise Report counts the sessions people actually made it to. Skipping ahead never counts against you.",
@@ -109,10 +109,10 @@ struct RTWalkStep: Identifiable {
                       caption: "It rings on your phone, even when locked. A habit opens after an on-time first-ring Stop; a checklist opens after any Stop.",
                       screenType: .ring(.accountability)),
                 .init(id: 3, title: "Work through it",
-                      caption: "Go in order and tick each one off, right from the lock screen. It closes itself when you're done or your time runs out.",
+                      caption: "Go in order and tick each one off, right from the lock screen. If your Stop never reached us, the app asks what happened and which steps you did.",
                       screenType: .routine),
                 .init(id: 4, title: "Your group sees it, live",
-                      caption: "Woke up, snoozed, or no response, plus how many steps you've done. Step names stay private unless you share them.",
+                      caption: "Woke up, snoozed, or no response, plus how many steps you've done. A missed habit shows in soft red. Step names stay private unless you share them.",
                       screenType: .roster(.accountability)),
                 .init(id: 5, title: "Build your streak",
                       caption: "Every on-time alarm adds to your streak. In Rise Report, woke-up days split into your steps, and missed ones show in soft red.",
@@ -317,13 +317,17 @@ private struct RTMockRoster: View {
             Divider().overlay(RT.divider)
             row("GA", Color(hex: "#5b8bb5"), "Gaurav", .snoozed, "snoozed")
             Divider().overlay(RT.divider)
-            row("SA", Color(hex: "#b57f5b"), "Sam", .waiting, "no update yet")
+            if type == .accountability {
+                row("SA", Color(hex: "#b57f5b"), "Sam", .wokeUp, "up at 6:40 AM", routine: [true, false, false], missed: true)
+            } else {
+                row("SA", Color(hex: "#b57f5b"), "Sam", .waiting, "no update yet")
+            }
         }
         .padding(16)
     }
 
     private func row(_ initials: String, _ color: Color, _ name: String, _ status: RTStatus, _ detail: String,
-                     routine: [Bool]? = nil) -> some View {
+                     routine: [Bool]? = nil, missed: Bool = false) -> some View {
         HStack(spacing: 10) {
             RTAvatar(initials: initials, color: color, size: 34)
             VStack(alignment: .leading, spacing: 3) {
@@ -331,10 +335,11 @@ private struct RTMockRoster: View {
                 Text(detail).font(.system(size: 12, weight: .medium)).foregroundStyle(RT.inkMuted)
                 if let routine {
                     HStack(spacing: 6) {
-                        RTRoutineBar(done: routine).frame(width: 70)
-                        Text("Routine \(routine.filter { $0 }.count) of \(routine.count)")
+                        RTRoutineBar(done: routine, missed: missed).frame(width: 70)
+                        Text(missed ? "Missed habit · \(routine.filter { $0 }.count) of \(routine.count)"
+                                    : "Routine \(routine.filter { $0 }.count) of \(routine.count)")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(RT.inkSecondary)
+                            .foregroundStyle(missed ? RT.stepMissedText : RT.inkSecondary)
                     }
                 }
             }
@@ -576,7 +581,7 @@ private struct RTMockEventReminder: View {
                     .font(.system(size: 18))
                     .foregroundStyle(RTGroupType.event.accent)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("RingTogether").font(.system(size: 10, weight: .bold)).foregroundStyle(RT.inkSecondary)
+                    Text("WhoZup").font(.system(size: 10, weight: .bold)).foregroundStyle(RT.inkSecondary)
                     Text("Sam sent a reminder for Gym Session!").font(.system(size: 12, weight: .semibold)).foregroundStyle(RT.ink)
                 }
                 Spacer()
@@ -608,28 +613,41 @@ private func mockChip(_ text: String, _ fg: Color, _ bg: Color) -> some View {
         .background(Capsule().fill(bg))
 }
 
-/// The three plan kinds.
+/// The two quick questions a new plan asks.
 private struct RTMockPlanKinds: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(RTPlanKind.allCases) { kind in
-                HStack(spacing: 12) {
-                    Image(systemName: kind.symbol)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(kind.tint)
-                        .frame(width: 38, height: 38)
-                        .background(RoundedRectangle(cornerRadius: 11).fill(kind.tintBackground))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(kind.title).font(.system(size: 14, weight: .bold)).foregroundStyle(RT.ink)
-                        Text(kind.tagline).font(.system(size: 10, weight: .bold)).foregroundStyle(kind.tint)
-                    }
-                    Spacer()
-                }
-                .padding(10)
-                .background(RoundedRectangle(cornerRadius: 14).fill(RT.canvas))
+        VStack(alignment: .leading, spacing: 8) {
+            question("1 · HOW OFTEN?", planBrown)
+            HStack(spacing: 8) {
+                choice("Just once", "calendar", planBrown, Color(hex: "#fbeed6"), on: false)
+                choice("Every week", "arrow.triangle.2.circlepath", Color(hex: "#3f6fa3"), Color(hex: "#e4eef5"), on: true)
+            }
+            question("2 · RING EVERYONE'S PHONE?", Color(hex: "#2f7d72")).padding(.top, 6)
+            HStack(spacing: 8) {
+                choice("Yes, ring", "alarm.fill", Color(hex: "#2f7d72"), Color(hex: "#e3f1ee"), on: true)
+                choice("Just RSVPs", "checkmark", RT.inkMuted, RT.cardBorder, on: false)
             }
         }
         .padding(18)
+    }
+
+    private func question(_ text: String, _ tint: Color) -> some View {
+        Text(text).font(.system(size: 11, weight: .heavy)).tracking(0.5).foregroundStyle(tint)
+    }
+
+    private func choice(_ title: String, _ symbol: String, _ tint: Color, _ bg: Color, on: Bool) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .bold)).foregroundStyle(tint)
+                .frame(width: 30, height: 30)
+                .background(RoundedRectangle(cornerRadius: 9).fill(bg))
+            Text(title).font(.system(size: 13, weight: .bold)).foregroundStyle(RT.ink)
+            Spacer(minLength: 0)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 12).fill(RT.canvas))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(on ? tint : .clear, lineWidth: 2))
     }
 }
 
@@ -727,36 +745,50 @@ private struct RTMockPlanHeadcount: View {
     }
 }
 
-/// The morning of a plan with an alarm.
+/// The morning of a plan with an alarm: who isn't up, which only the host can nudge.
 private struct RTMockPlanMorning: View {
+    private let ink = Color(hex: "#7c2d20")
+    private let red = Color(hex: "#a83f2e")
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .lastTextBaseline, spacing: 6) {
-                Text("6").font(.rtDisplay(40, .heavy)).foregroundStyle(RT.ink)
+                Text("5").font(.rtDisplay(36, .heavy)).foregroundStyle(RT.ink)
                 Text("of 7 are up").font(.system(size: 14, weight: .semibold)).foregroundStyle(RT.inkMuted)
             }
-            GeometryReader { geo in
-                HStack(spacing: 2) {
-                    Rectangle().fill(RT.dotOnTime).frame(width: geo.size.width * 0.85)
-                    Rectangle().fill(RT.dotLate)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    Text("Not up · 2").font(.system(size: 14, weight: .heavy)).foregroundStyle(ink)
+                    Text("Host only").font(.system(size: 10, weight: .bold)).foregroundStyle(ink)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Capsule().fill(Color(hex: "#f2d3cb")))
                 }
-            }
-            .frame(height: 10)
-            .clipShape(Capsule())
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Gaurav isn't up").font(.system(size: 14, weight: .bold)).foregroundStyle(Color(hex: "#7c2d20"))
-                    Text("No answer since the alarm.").font(.system(size: 12, weight: .medium)).foregroundStyle(Color(hex: "#7c2d20"))
-                }
-                Spacer()
-                Text("Nudge")
+                person("GA", "#7b6bb5", "Gaurav", "no answer since the alarm")
+                person("SA", "#b57f5b", "Sam", "snoozed, hasn't stopped it")
+                Text("Nudge all 2")
                     .font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
-                    .padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(Capsule().fill(Color(hex: "#a83f2e")))
+                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .background(RoundedRectangle(cornerRadius: 11).fill(red))
             }
             .padding(12)
             .background(RoundedRectangle(cornerRadius: 12).fill(Color(hex: "#f7e0da")))
         }
         .padding(18)
+    }
+
+    private func person(_ initials: String, _ hex: String, _ name: String, _ detail: String) -> some View {
+        HStack(spacing: 8) {
+            RTAvatar(initials: initials, color: Color(hex: hex), size: 24)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(name).font(.system(size: 13, weight: .bold)).foregroundStyle(RT.ink)
+                Text(detail).font(.system(size: 11, weight: .medium)).foregroundStyle(ink)
+            }
+            Spacer()
+            Text("Nudge")
+                .font(.system(size: 12, weight: .bold)).foregroundStyle(red)
+                .padding(.horizontal, 11).padding(.vertical, 5)
+                .background(Capsule().fill(RT.card))
+                .overlay(Capsule().stroke(red, lineWidth: 1.2))
+        }
     }
 }

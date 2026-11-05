@@ -52,7 +52,7 @@ struct RTCreatePlanSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("New \(kind.badge.lowercased())")
+                    Text(kind.formTitle)
                         .font(.rtDisplay(28, .bold))
                         .foregroundStyle(RT.ink)
                     Text(kind.blurb)

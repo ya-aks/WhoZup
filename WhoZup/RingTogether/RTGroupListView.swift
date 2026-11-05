@@ -402,7 +402,7 @@ struct RTEmptyState: View {
     var plans = false
 
     private var message: String {
-        if plans { return "No plans yet. Tap ＋ for a one-time or repeating plan." }
+        if plans { return "No plans yet. Tap ＋ to start a meetup." }
         switch type {
         case .accountability: return "No alarm groups yet. Create one and invite friends to keep each other on time."
         case .shared: return "No In Sync groups yet. Create one common alarm for the whole crew."

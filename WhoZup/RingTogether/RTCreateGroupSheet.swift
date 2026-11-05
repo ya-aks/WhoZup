@@ -63,7 +63,7 @@ struct RTCreateGroupSheet: View {
                     }
                 }
 
-                Text(planKind.map { "New \($0.badge.lowercased())" } ?? "New group")
+                Text(planKind?.formTitle ?? "New group")
                     .font(.rtDisplay(28, .bold))
                     .foregroundStyle(RT.ink)
                     .padding(.top, 20)

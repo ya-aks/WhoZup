@@ -23,33 +23,36 @@ enum RTPlanKind: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .once: return "One-time plan"
-        case .onceAlarm: return "One-time plan with an alarm"
-        case .repeating: return "Repeating plan"
+        case .once: return "Meetup"
+        case .onceAlarm: return "On the dot"
+        case .repeating: return "Recurring meetup"
         }
     }
 
-    var badge: String {
+    var badge: String { title }
+
+    /// The create form's heading.
+    var formTitle: String {
         switch self {
-        case .once: return "One-time plan"
-        case .onceAlarm: return "One-time + alarm"
-        case .repeating: return "Repeating plan"
+        case .once: return "New meetup"
+        case .onceAlarm: return "New on-the-dot plan"
+        case .repeating: return "New recurring meetup"
         }
     }
 
     var tagline: String {
         switch self {
-        case .once: return "ONCE · NO ALARM"
-        case .onceAlarm: return "ONCE · EVERYONE'S ALARM RINGS"
-        case .repeating: return "REPEATS · ALARM OPTIONAL"
+        case .once: return "DINNER · PARTY · MOVIE NIGHT"
+        case .onceAlarm: return "STUDY AT 4 · EARLY FLIGHT · MATCH"
+        case .repeating: return "MORNING RUN · CLASS · WEEKLY GAME"
         }
     }
 
     var blurb: String {
         switch self {
-        case .once: return "A set time and place. See who's coming, who's running late and who can't make it."
-        case .onceAlarm: return "The same, plus everyone's alarm rings before it starts, so you see who's up."
-        case .repeating: return "Happens on set days. Everyone answers for each session, with or without an alarm."
+        case .once: return "Pick a time and place. Everyone says if they're coming, running late or can't make it."
+        case .onceAlarm: return "Everyone's phone rings before it starts, any time of day, so you see who's ready and nobody misses it."
+        case .repeating: return "Same days every week. Everyone's in unless they skip, and you can add an alarm."
         }
     }
 

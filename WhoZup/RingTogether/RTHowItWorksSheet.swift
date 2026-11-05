@@ -74,10 +74,10 @@ struct RTWalkStep: Identifiable {
     /// The Plans tab: one-off and repeating plans, with an optional alarm.
     static let planSteps: [RTWalkStep] = [
         .init(id: 0, title: "Pick how it runs",
-              caption: "A one-time plan, a one-time plan with an alarm, or a repeating plan. Each has its own short form.",
+              caption: "A meetup, an on-the-dot plan where everyone's phone rings first, or a recurring meetup. Each has its own short form.",
               screenType: .planKinds),
         .init(id: 1, title: "Everyone answers",
-              caption: "For each session: In, Running late with an ETA, or Skip. A repeating plan can count everyone as In unless they skip.",
+              caption: "For each date: In, Running late with an ETA, or Skip. A recurring meetup can count everyone as In unless they skip.",
               screenType: .planAnswer),
         .init(id: 2, title: "Skip ahead, stay quiet",
               caption: "Skip a date and your alarm stays quiet that day. A skip never counts as missed.",

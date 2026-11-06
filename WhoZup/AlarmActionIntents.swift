@@ -309,14 +309,19 @@ enum AlarmActionHandler {
         // first-ring Stop, because the habit is built at the alarm or not at all.
         let snoozedThisRing = last.map { $0.kind == "snooze" && $0.at >= scheduledTime.addingTimeInterval(-60) } ?? false
         AlarmActionStore.shared.markHandled(alarmID: alarmID, kind: kindKey, at: now)
+        // The snooze is part of this ring's answer: a Stop after it is "snoozed",
+        // not "woke up" (2026-11-06, E11) — so the day and the habit aren't green.
+        var actions = [MemberAction(kind: kind, timestamp: now)]
+        if snoozedThisRing, let last { actions.insert(MemberAction(kind: .snooze, timestamp: max(last.at, scheduledTime)), at: 0) }
         let derived = StatusDerivation.status(
             scheduledTime: scheduledTime,
-            actions: [MemberAction(kind: kind, timestamp: now)],
+            actions: actions,
             now: now,
             lateWindow: lateWindow
         )
         let status = GroupRepository.rtStatus(from: derived)
-        let detail = GroupRepository.detail(for: status, at: now)
+        let upAfterSnooze = kind == .dismiss && snoozedThisRing && status == .snoozed
+        let detail = upAfterSnooze ? GroupRepository.upAfterSnoozeDetail(at: now) : GroupRepository.detail(for: status, at: now)
 
         let db = Firestore.firestore()
         for groupId in record.groupIds {

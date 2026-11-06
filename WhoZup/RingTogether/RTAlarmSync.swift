@@ -189,6 +189,50 @@ final class RTAlarmSync {
         return ringDays(group, now: now).isEmpty
     }
 
+    /// AlarmKit can't skip one date of a weekly alarm, so a skipped date drops
+    /// its weekday from the repeating alarm for the coming week. Reconcile
+    /// brings the weekday back once the date has passed, but only when the app
+    /// runs; if it isn't opened before that weekday comes round again, the next
+    /// week would stay silent too. This is the one-time "#back" alarm that
+    /// covers it: the first later occurrence of a dropped weekday that isn't
+    /// itself skipped, and the groups that ring then. So a skip silences only
+    /// its own date, as on Android (`AlarmReceiver` checks the date at ring
+    /// time). Dropped again by the next reconcile once the weekday is back.
+    static func backFire(forTime time: String, in groups: [RTGroup], now: Date = Date()) -> (date: Date, groupIds: [String])? {
+        let atTime = groups.filter {
+            ($0.type == .accountability || $0.type == .shared) && $0.alarm == time && !$0.alarmOnce
+        }
+        guard !atTime.isEmpty else { return nil }
+        let base = atTime.reduce(into: Set<Int>()) { $0.formUnion($1.alarmDays.isEmpty ? Set(1...7) : Set($1.alarmDays)) }
+        let kept = atTime.reduce(into: Set<Int>()) { $0.formUnion(ringDays($1, now: now)) }
+        let dropped = base.subtracting(kept)
+        guard !dropped.isEmpty else { return nil }
+
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: now)
+        let parts = time.split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2 else { return nil }
+        func skips(_ g: RTGroup) -> Set<String> { Set(g.roster.first(where: { $0.isYou })?.skips ?? []) }
+        func ringsOn(_ g: RTGroup, weekday: Int) -> Bool { g.alarmDays.isEmpty || g.alarmDays.contains(weekday) }
+
+        var best: (date: Date, groupIds: [String])?
+        for offset in 0..<7 {
+            guard let day = cal.date(byAdding: .day, value: offset, to: today) else { continue }
+            let weekday = cal.component(.weekday, from: day)
+            guard dropped.contains(weekday) else { continue }
+            for week in 1...8 {
+                guard let later = cal.date(byAdding: .day, value: 7 * week, to: day) else { continue }
+                let key = GroupRepository.dayKey(later)
+                let ringing = atTime.filter { ringsOn($0, weekday: weekday) && !skips($0).contains(key) }
+                guard !ringing.isEmpty,
+                      let fire = cal.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: later) else { continue }
+                if best == nil || fire < best!.date { best = (fire, ringing.map(\.id).sorted()) }
+                break
+            }
+        }
+        return best
+    }
+
     /// The alarms that *should* exist, keyed by slot (see `slotKey`): repeating
     /// alarms collapse per distinct time, while a single shared alarm gets its
     /// own "#once" slot. Group ids are sorted for stable output.
@@ -197,6 +241,14 @@ final class RTAlarmSync {
         for group in groups where group.type == .accountability || group.type == .shared {
             guard !group.alarm.isEmpty, !onceIsOver(group, now: now), !isSkipped(group, now: now) else { continue }
             desired[slotKey(for: group), default: []].append(group.id)
+        }
+        // A weekday dropped for a skipped date comes back next week even if the
+        // app isn't opened again (see `backFire`).
+        let repeatingTimes = Set(groups.filter {
+            ($0.type == .accountability || $0.type == .shared) && !$0.alarm.isEmpty && !$0.alarmOnce
+        }.map(\.alarm))
+        for time in repeatingTimes {
+            if let back = backFire(forTime: time, in: groups, now: now) { desired["\(time)#back"] = back.groupIds }
         }
         return desired.mapValues { $0.sorted() }
     }
@@ -217,6 +269,16 @@ final class RTAlarmSync {
         return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5],
                            bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11],
                            bytes[12], bytes[13], bytes[14], bytes[15]))
+    }
+
+    /// The slot an existing alarm belongs to, or nil if this sync didn't
+    /// schedule it. The system reports every fixed-date alarm as "HH:mm#once";
+    /// a "#back" alarm (see `backFire`) is told apart by its id.
+    static func ourKey(_ slot: AlarmScheduler.ExistingSlot) -> String? {
+        if alarmID(forTime: slot.key) == slot.id { return slot.key }
+        guard slot.key.hasSuffix("#once") else { return nil }
+        let back = String(slot.key.dropLast("#once".count)) + "#back"
+        return alarmID(forTime: back) == slot.id ? back : nil
     }
 
     /// Reconciles on-device alarms to match the user's alarm-type groups.
@@ -249,8 +311,8 @@ final class RTAlarmSync {
         // untouched.
         var live: [String: UUID] = [:]
         for slot in existing {
-            guard Self.alarmID(forTime: slot.key) == slot.id else { continue }
-            live[slot.key] = slot.id
+            guard let key = Self.ourKey(slot) else { continue }
+            live[key] = slot.id
         }
 
         // Cancel alarms for slots nobody wants any more — a group was deleted,
@@ -275,14 +337,17 @@ final class RTAlarmSync {
         for (key, groupIds) in desired {
             let id = Self.alarmID(forTime: key)
             let label = label(for: groupIds, repository: repository)
-            // A "#once" key is a single alarm; everything else repeats.
-            let once = key.hasSuffix("#once")
-            let time = once ? String(key.dropLast("#once".count)) : key
+            // A "#once" or "#back" key is a single alarm; everything else repeats.
+            let back = key.hasSuffix("#back")
+            let once = key.hasSuffix("#once") || back
+            let time = once ? String(key.dropLast(5)) : key
             let days = once ? [] : Self.unionDays(forTime: time, in: repository.groups)
             // A single alarm rings at its own fire date (the first occurrence
             // after it was set), not "the next 06:30" — which after it rang
             // would be tomorrow.
-            let onceFire = once ? groupIds.compactMap { repository.group(id: $0)?.alarmOnceFireDate }.min() : nil
+            let onceFire = back
+                ? Self.backFire(forTime: time, in: repository.groups)?.date
+                : once ? groupIds.compactMap { repository.group(id: $0)?.alarmOnceFireDate }.min() : nil
             let fireDate = onceFire ?? RTAlarmTime.nextDate(for: time)
 
             // Always refresh these: the alarm may predate this launch, and the
@@ -368,7 +433,7 @@ final class RTAlarmSync {
             await AlarmCheckInNotifier.removeAll()
             await RoutineCoordinator.shared.reset()
         }
-        for slot in (try? scheduler.existingSlots()) ?? [] where alarmID(forTime: slot.key) == slot.id {
+        for slot in (try? scheduler.existingSlots()) ?? [] where ourKey(slot) != nil {
             try? scheduler.cancelAlarm(id: slot.id)
         }
     }

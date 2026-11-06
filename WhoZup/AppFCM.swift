@@ -318,6 +318,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // the app is never opened.
         MissedAlarmBackgroundTask.register()
         MissedAlarmBackgroundTask.schedule()
+        #if DEBUG
+        // End-to-end suite only (no-op unless launched with WHOZUP_E2E_*).
+        E2EHooks.atLaunch()
+        #endif
         // Before launch completes, so a check-in answer tapped while the app was
         // closed reaches `didReceive` (no Firebase is touched here).
         AppFCM.shared.registerNotificationHandling()

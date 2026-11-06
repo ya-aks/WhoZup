@@ -400,21 +400,10 @@ struct RTCheckInCard: View {
         Button {
             guard !saving else { return }
             saving = true
-            // Decide before recording: the roster changes once the status lands.
-            let habit = repository.checkInFollowUp(groupId: groupId, status: status)
             Task {
-                await repository.recordManualCheckIn(groupId: groupId, status: status)
-                // Still inside the habit's window: start the real routine, as a
-                // Stop would have. It opens now, and "Close · keep going later"
-                // leaves Continue on the group screen until the window ends.
-                // Only once the window has passed do we ask after the fact.
-                if let habit, let uid = repository.signedInUid,
-                   Date() < pending.fireDate.addingTimeInterval(TimeInterval(habit.windowMinutes * 60)) {
-                    RoutineLog.add("Check-in → open \(habit.kindNoun) for \(groupId)")
-                    await RoutineCoordinator.shared.begin(
-                        groupId: groupId, groupName: repository.group(id: groupId)?.name ?? "Alarms",
-                        habit: habit, uid: uid, alarmFiredAt: pending.fireDate)
-                } else if let habit {
+                let (outcome, habit) = await RoutineEntry.answerCheckIn(
+                    repository: repository, groupId: groupId, pending: pending, status: status)
+                if outcome == .askAfterFact, let habit {
                     withAnimation {
                         followUp = FollowUp(habit: habit, fireDate: pending.fireDate, time: pending.time,
                                             done: Array(repeating: false, count: habit.steps.count))

@@ -107,7 +107,9 @@ final class StatusDerivationTests: XCTestCase {
         XCTAssertEqual(status, .respondedLate)
     }
 
-    func testSnoozeFollowedByLaterDismissWithinWindowResolvesToRespondedOnTime() {
+    /// "Woke up" means stopped on the first ring (2026-11-06): before this a
+    /// snooze-then-Stop counted as woke up and showed the habit green.
+    func testSnoozeFollowedByLaterDismissWithinWindowResolvesToSnoozed() {
         let snoozeTime = alarmTime.addingTimeInterval(60)
         let dismissTime = alarmTime.addingTimeInterval(120)
         let actions = [
@@ -122,7 +124,7 @@ final class StatusDerivationTests: XCTestCase {
             lateWindow: lateWindow
         )
 
-        XCTAssertEqual(status, .respondedOnTime)
+        XCTAssertEqual(status, .snoozed)
     }
 
     func testActionBeforeScheduledTimeIsIgnored() {

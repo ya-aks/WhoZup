@@ -24,13 +24,22 @@ struct RTMorningOfCard: View {
         }
     }
 
-    @ViewBuilder private func content(now: Date) -> some View {
-        // People who said they'd come: they're the ones expected up.
+    /// Who is expected up (everyone not skipping), who is up (woke up or running
+    /// late), and who gets flagged "Not up": expected, not up, not you, and only
+    /// once `flagNotUpMinutes` after the alarm has passed.
+    static func state(group: RTGroup, session: RTPlanSession, alarmAt: Date, now: Date)
+        -> (expected: [RTMember], up: [RTMember], flagged: [RTMember]) {
         let expected = group.roster.filter { session.answer(for: $0.uid) != .skipping }
         let up = expected.filter { $0.status == .wokeUp || $0.status == .runningLate }
         let flagAt = group.planFlagNotUpMinutes.map { alarmAt.addingTimeInterval(TimeInterval($0 * 60)) }
         let flagged = (flagAt.map { now >= $0 } ?? false)
             ? expected.filter { !$0.isYou && $0.status != .wokeUp && $0.status != .runningLate } : []
+        return (expected, up, flagged)
+    }
+
+    @ViewBuilder private func content(now: Date) -> some View {
+        let state = Self.state(group: group, session: session, alarmAt: alarmAt, now: now)
+        let expected = state.expected, up = state.up, flagged = state.flagged
 
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 6) {

@@ -90,6 +90,9 @@ final class GroupRepository {
     private var askNowCounts: [String: Int] = [:]
     /// The id of the group most recently created on this device (for analytics).
     private(set) var lastCreatedGroupId: String?
+    /// The invite code of the group `createGroup` last made (plans return the
+    /// group id, as on Android, and the add-members sheet reads the code here).
+    private(set) var lastCreatedInviteCode: String?
     /// Last user properties sent, so they're only sent on change.
     private var lastAnalyticsProps: [Int] = []
     /// Plans: the next session's answers, by group then uid.
@@ -668,6 +671,7 @@ final class GroupRepository {
         let code = Self.makeInviteCode()
         let groupRef = db.collection("groups").document()
         lastCreatedGroupId = groupRef.documentID
+        lastCreatedInviteCode = code
 
         var payload: [String: Any] = [
             "type": type.rawValue,
@@ -1379,7 +1383,29 @@ final class GroupRepository {
     /// docs/plans-build.md); headcount asks are stored now and sent by a later
     /// Cloud Function.
     @discardableResult
+    /// Creates a plan; returns its group id (Android's `createPlan` returns the
+    /// same), or nil if it failed. The invite code is `lastCreatedInviteCode`.
     func createPlan(
+        kind: RTPlanKind,
+        name: String,
+        place: String,
+        start: Date,
+        days: [Int] = [],
+        hasAlarm: Bool,
+        alarmLeadMinutes: Int,
+        flagNotUpMinutes: Int?,
+        attendanceDefault: String,
+        headcountAsks: [RTHeadcountAsk],
+        weeklyLookahead: Bool
+    ) async -> String? {
+        let code = await createPlanGroup(kind: kind, name: name, place: place, start: start, days: days,
+                                         hasAlarm: hasAlarm, alarmLeadMinutes: alarmLeadMinutes,
+                                         flagNotUpMinutes: flagNotUpMinutes, attendanceDefault: attendanceDefault,
+                                         headcountAsks: headcountAsks, weeklyLookahead: weeklyLookahead)
+        return code == nil ? nil : lastCreatedGroupId
+    }
+
+    private func createPlanGroup(
         kind: RTPlanKind,
         name: String,
         place: String,
@@ -1425,13 +1451,9 @@ final class GroupRepository {
                 return await createGroup(type: .shared, name: name, planFields: fields)
             }
             fields["alarmLeadMinutes"] = alarmLeadMinutes
-            // An alarm before midnight for a just-after-midnight start rings
-            // the evening before: shift the days back one.
-            let alarmAt = start.addingTimeInterval(TimeInterval(-alarmLeadMinutes * 60))
-            let crossesMidnight = !Calendar.current.isDate(alarmAt, inSameDayAs: start)
-            let alarmDays = crossesMidnight ? days.map { $0 == 1 ? 7 : $0 - 1 } : days
-            return await createGroup(type: .shared, name: name, alarmTime: RTAlarmTime.string(from: alarmAt),
-                                     alarmDays: alarmDays, alarmOnce: false, planFields: fields)
+            let alarm = Self.planAlarm(start: start, leadMinutes: alarmLeadMinutes, days: days)
+            return await createGroup(type: .shared, name: name, alarmTime: alarm.time,
+                                     alarmDays: alarm.days, alarmOnce: false, planFields: fields)
         }
     }
 
@@ -1439,6 +1461,16 @@ final class GroupRepository {
     /// so "the first occurrence after alarmSetAt" (how older builds schedule it)
     /// is the plan's date.
     static func onceAnchor(_ alarmAt: Date) -> Date { alarmAt.addingTimeInterval(-60) }
+
+    /// A repeating plan's alarm: `lead` minutes before `start`, on the session
+    /// days, except an alarm before midnight for a just-after-midnight start
+    /// rings the evening before, so its days shift back one.
+    static func planAlarm(start: Date, leadMinutes lead: Int, days: [Int],
+                          calendar: Calendar = .current) -> (time: String, days: [Int]) {
+        let alarmAt = start.addingTimeInterval(TimeInterval(-lead * 60))
+        let crossesMidnight = !calendar.isDate(alarmAt, inSameDayAs: start)
+        return (RTAlarmTime.string(from: alarmAt), crossesMidnight ? days.map { $0 == 1 ? 7 : $0 - 1 } : days)
+    }
 
     private static func firstOccurrence(of time: String, after date: Date) -> Date? {
         let parts = time.split(separator: ":")
@@ -1822,6 +1854,12 @@ final class GroupRepository {
 
     /// The status line, stamped with when the person answered — `at` matters
     /// for a response replayed later from the journal.
+    /// Stopped on a re-ring after a snooze: recorded as snoozed, with when.
+    /// Same copy as Android's `StatusDerivation.upAfterSnoozeDetail`.
+    static func upAfterSnoozeDetail(at date: Date = Date()) -> String {
+        "snoozed · " + detail(for: .wokeUp, at: date)
+    }
+
     static func detail(for status: RTStatus, at date: Date = Date()) -> String {
         // Force 12-hour AM/PM rather than the device's short-time style, which is
         // 24-hour on some locales — WhoZup shows wake-up times as AM/PM everywhere.

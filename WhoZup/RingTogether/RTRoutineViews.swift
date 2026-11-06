@@ -110,6 +110,14 @@ struct RTTodayRoutineCard: View {
                     Text("You're up. Start it any time before \(RTAlarmTime.display(RTAlarmTime.string(from: startBy))).")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(RT.inkMuted)
+                } else if let missed = RoutineEntry.missedToday(group: group, habit: habit) {
+                    // Today's occurrence is settled first: it's a miss, not green.
+                    Text(missed)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(RT.stepMissedText)
+                    Text("Next time: stop your \(RTAlarmTime.display(alarm)) alarm on the first ring")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(RT.inkMuted)
                 } else {
                     Text(habit.checklist
                          ? "Opens when you stop your \(RTAlarmTime.display(alarm)) alarm"
@@ -129,16 +137,11 @@ struct RTTodayRoutineCard: View {
                         .background(RoundedRectangle(cornerRadius: 12).fill(RT.dotOnTime))
                 }
                 .buttonStyle(RTPressStyle())
-            } else if startBy != nil, let me = group.roster.first(where: { $0.isYou }) {
+            } else if startBy != nil {
                 // You're marked up but nothing started it (the Stop never reached
                 // the app, or you answered from the notification): start it here.
                 Button {
-                    Task {
-                        RoutineLog.add("Start button → open \(habit.kindNoun) for \(groupId)")
-                        await coordinator.begin(groupId: groupId, groupName: group.name, habit: habit,
-                                                uid: me.uid, alarmFiredAt: todaysFire(now: Date()) ?? Date())
-                        coordinator.presentRoutine = true
-                    }
+                    Task { await RoutineEntry.startFromCard(group: group, habit: habit) }
                 } label: {
                     Text(habit.checklist ? "Start checklist" : "Start habit")
                         .font(.system(size: 14, weight: .bold))
@@ -155,28 +158,8 @@ struct RTTodayRoutineCard: View {
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color(hex: "#b9dccd"), lineWidth: 1.5))
     }
 
-    /// When today's alarm rang (nil if it hasn't yet, or a one-time alarm on another day).
-    private func todaysFire(now: Date) -> Date? {
-        if group.alarmOnce {
-            guard let fire = group.alarmOnceFireDate, Calendar.current.isDate(fire, inSameDayAs: now) else { return nil }
-            return fire <= now ? fire : nil
-        }
-        let parts = alarm.split(separator: ":").compactMap { Int($0) }
-        guard parts.count == 2,
-              let fire = Calendar.current.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: now),
-              fire <= now else { return nil }
-        return fire
-    }
-
-    /// Until when a routine that never started can still be started from here:
-    /// you're marked up today (any answer, for a checklist, which follows any
-    /// Stop) and today's window, from the alarm time, hasn't ended.
     private func startableUntil(now: Date) -> Date? {
-        guard let me = group.roster.first(where: { $0.isYou }),
-              habit.checklist ? [.wokeUp, .snoozed, .runningLate].contains(me.status) : me.status == .wokeUp,
-              let fire = todaysFire(now: now) else { return nil }
-        let until = fire.addingTimeInterval(TimeInterval(habit.windowMinutes * 60))
-        return now < until ? until : nil
+        RoutineEntry.startableUntil(group: group, habit: habit, now: now)
     }
 }
 

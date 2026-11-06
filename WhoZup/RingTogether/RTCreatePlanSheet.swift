@@ -369,7 +369,7 @@ struct RTCreatePlanSheet: View {
         let chosen = Self.askOptions(kind).filter { asks[$0.ask.id] ?? false }.map(\.ask)
         let customAsks = Self.askOptions(kind).contains { (asks[$0.ask.id] ?? false) != $0.on }
         let weeklyBefore = repository.weeklyPlansHosted
-        let code = await repository.createPlan(
+        let groupId = await repository.createPlan(
             kind: kind,
             name: name.trimmingCharacters(in: .whitespaces),
             place: place.trimmingCharacters(in: .whitespaces),
@@ -382,10 +382,10 @@ struct RTCreatePlanSheet: View {
             headcountAsks: chosen,
             weeklyLookahead: kind == .repeating
         )
-        if let code {
+        if let groupId, let code = repository.lastCreatedInviteCode {
             let ring = kind == .onceAlarm || (kind == .repeating && hasAlarm)
             RTAnalytics.planCreated(
-                groupId: repository.lastCreatedGroupId ?? "", kind: kind, ring: ring, leadMinutes: alarmLead,
+                groupId: groupId, kind: kind, ring: ring, leadMinutes: alarmLead,
                 customLead: customLead, flagNotUp: kind == .onceAlarm && flagNotUp,
                 everyoneIn: kind == .repeating && everyoneIn, asks: chosen.count, customAsks: customAsks,
                 hasPlace: !place.trimmingCharacters(in: .whitespaces).isEmpty,

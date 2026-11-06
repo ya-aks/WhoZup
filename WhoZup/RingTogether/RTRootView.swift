@@ -105,6 +105,9 @@ struct RTRootView: View {
                 repository.stop()
             }
         }
+        #if DEBUG
+        .task(id: repository.alarmDataReady) { await E2EHooks.afterLoad(repository) }
+        #endif
         .task(id: "\(repository.alarmDataReady)|" + RTAlarmSync.signature(for: repository.groups)) {
             // Write any alarm response that couldn't be written when it happened.
             await AlarmActionHandler.drainJournal()

@@ -413,3 +413,82 @@ final class RoutineCoordinator {
         )
     }
 }
+
+/// The ways a routine starts from inside the app, shared by the UI and the
+/// end-to-end hooks (`E2EHooks`) so tests run exactly the code people tap.
+/// Rules: docs/habits.md. Scenarios: docs/testing.md.
+@MainActor
+enum RoutineEntry {
+    enum CheckInOutcome: String { case startedLive, askAfterFact, nothingToAsk }
+
+    /// "I woke up" / "I snoozed" on the check-in card for an alarm whose
+    /// response never reached the app. Records the answer; then, if there's a
+    /// habit or checklist to follow up: inside its window, start the live
+    /// routine as a Stop would; after it, ask after the fact.
+    static func answerCheckIn(repository: GroupRepository, groupId: String, pending: RTPendingCheckIn,
+                              status: RTStatus, now: Date = Date()) async -> (CheckInOutcome, MemberHabit?) {
+        // Decide before recording: the roster changes once the status lands.
+        let habit = repository.checkInFollowUp(groupId: groupId, status: status)
+        await repository.recordManualCheckIn(groupId: groupId, status: status)
+        guard let habit else { return (.nothingToAsk, nil) }
+        if let uid = repository.signedInUid,
+           now < pending.fireDate.addingTimeInterval(TimeInterval(habit.windowMinutes * 60)) {
+            RoutineLog.add("Check-in → open \(habit.kindNoun) for \(groupId)")
+            await RoutineCoordinator.shared.begin(
+                groupId: groupId, groupName: repository.group(id: groupId)?.name ?? "Alarms",
+                habit: habit, uid: uid, alarmFiredAt: pending.fireDate)
+            return (.startedLive, habit)
+        }
+        return (.askAfterFact, habit)
+    }
+
+    /// When today's alarm rang (nil if it hasn't yet, or a one-time alarm on another day).
+    nonisolated static func todaysFire(group: RTGroup, now: Date) -> Date? {
+        if group.alarmOnce {
+            guard let fire = group.alarmOnceFireDate, Calendar.current.isDate(fire, inSameDayAs: now) else { return nil }
+            return fire <= now ? fire : nil
+        }
+        let parts = group.alarm.split(separator: ":").compactMap { Int($0) }
+        guard parts.count == 2,
+              let fire = Calendar.current.date(bySettingHour: parts[0], minute: parts[1], second: 0, of: now),
+              fire <= now else { return nil }
+        return fire
+    }
+
+    /// Until when a routine that never started can still be started from the
+    /// Start button: you're marked up today (any answer, for a checklist, which
+    /// follows any Stop) and today's alarm time + window hasn't passed.
+    nonisolated static func startableUntil(group: RTGroup, habit: MemberHabit, now: Date) -> Date? {
+        guard let me = group.roster.first(where: { $0.isYou }),
+              habit.checklist ? [.wokeUp, .snoozed, .runningLate].contains(me.status) : me.status == .wokeUp,
+              let fire = todaysFire(group: group, now: now) else { return nil }
+        let until = fire.addingTimeInterval(TimeInterval(habit.windowMinutes * 60))
+        return now < until ? until : nil
+    }
+
+    /// Today's occurrence when the habit didn't run because you weren't up on
+    /// the first ring: shown on Today's routine as missed before the next
+    /// occurrence (2026-11-06, E11). Nil for a checklist, which opens after any
+    /// Stop. Same copy as Android `RoutineEntry.missedToday`.
+    nonisolated static func missedToday(group: RTGroup, habit: MemberHabit) -> String? {
+        guard !habit.checklist, let me = group.roster.first(where: { $0.isYou }) else { return nil }
+        switch me.status {
+        case .snoozed: return "Snoozed today · no routine"
+        case .runningLate: return "Up late today · no routine"
+        case .silentLate: return "Missed today · no routine"
+        default: return nil
+        }
+    }
+
+    /// The Start habit / Start checklist button. Returns whether a routine started.
+    @discardableResult
+    static func startFromCard(group: RTGroup, habit: MemberHabit, now: Date = Date()) async -> Bool {
+        guard startableUntil(group: group, habit: habit, now: now) != nil,
+              let me = group.roster.first(where: { $0.isYou }) else { return false }
+        RoutineLog.add("Start button → open \(habit.kindNoun) for \(group.id)")
+        await RoutineCoordinator.shared.begin(groupId: group.id, groupName: group.name, habit: habit,
+                                              uid: me.uid, alarmFiredAt: todaysFire(group: group, now: now) ?? now)
+        RoutineCoordinator.shared.presentRoutine = true
+        return true
+    }
+}

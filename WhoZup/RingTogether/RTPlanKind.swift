@@ -14,6 +14,12 @@ import SwiftUI
 enum RTPlanKind: String, CaseIterable, Identifiable {
     case once, onceAlarm = "onceAlarm", repeating = "repeat"
 
+    /// The two quick questions → the stored kind: weekly → `repeat` (its alarm
+    /// switch seeded from the ring answer); once + ring → `onceAlarm`; once → `once`.
+    static func from(weekly: Bool, ring: Bool) -> RTPlanKind {
+        weekly ? .repeating : (ring ? .onceAlarm : .once)
+    }
+
     var id: String { rawValue }
 
     var groupType: RTGroupType { self == .once ? .event : .shared }
@@ -119,7 +125,7 @@ struct RTPlanKindSheet: View {
 
                 Button {
                     guard let weekly, let ring else { return }
-                    let kind: RTPlanKind = weekly ? .repeating : (ring ? .onceAlarm : .once)
+                    let kind = RTPlanKind.from(weekly: weekly, ring: ring)
                     RTAnalytics.planQuestionsAnswered(weekly: weekly, ring: ring)
                     dismiss()
                     // Let this sheet finish closing before the form opens.

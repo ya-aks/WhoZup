@@ -59,7 +59,9 @@ public enum StatusDerivation {
     ///   - scheduledTime: The alarm/event time the status is being derived relative to.
     ///   - actions: The sequence of device actions taken by the member, in any order.
     ///     If multiple actions are present, the most recent action (by timestamp) determines
-    ///     the status — e.g. a snooze followed by a later dismiss resolves to `respondedOnTime`.
+    ///     the status, except that a dismiss after an earlier snooze of the same ring is
+    ///     `snoozed`: "woke up" means stopped on the first ring (docs/alarms.md; decision
+    ///     2026-11-06, E2E E11). Before that a snooze-then-Stop counted as woke up.
     ///   - now: The current time to evaluate against (injected, not read from `Date()`, to keep
     ///     this pure and deterministic for tests).
     ///   - lateWindow: The configurable window after `scheduledTime` within which an action
@@ -86,7 +88,8 @@ public enum StatusDerivation {
             }
             switch latest.kind {
             case .dismiss:
-                return .respondedOnTime
+                let snoozedFirst = responses.contains { $0.kind == .snooze && $0.timestamp < latest.timestamp }
+                return snoozedFirst ? .snoozed : .respondedOnTime
             case .snooze:
                 return .snoozed
             }

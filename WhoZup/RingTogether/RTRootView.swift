@@ -105,10 +105,13 @@ struct RTRootView: View {
                 repository.stop()
             }
         }
-        .task(id: RTAlarmSync.signature(for: repository.groups)) {
+        .task(id: "\(repository.alarmDataReady)|" + RTAlarmSync.signature(for: repository.groups)) {
             // Write any alarm response that couldn't be written when it happened.
             await AlarmActionHandler.drainJournal()
             await alarmSync?.reconcile()
+            // Again now that reconcile has (re)saved every alarm record: a Stop
+            // that arrived before the records existed is kept and written here.
+            await AlarmActionHandler.drainJournal()
             // Back-fill any alarms that were skipped while the app wasn't running
             // (device off, never dismissed) — mark them silent-late after the
             // deadline, since nothing else would.

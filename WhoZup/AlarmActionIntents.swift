@@ -269,7 +269,11 @@ enum AlarmActionHandler {
         guard let record = AlarmActionStore.shared.record(for: alarmID) else {
             logger.error("No persisted record for alarm \(alarmIDString, privacy: .public)")
             RoutineLog.add("\(kind == .dismiss ? "Stop" : "Snooze"): no alarm record (locked=\(locked))")
-            return locked ? .retryLater : .ignored
+            // Keep a recent tap and retry once the app has re-saved its alarm
+            // records (see RTRootView: drain → reconcile → drain), rather than
+            // dropping a real response. Give up after a few hours.
+            let recent = Date().timeIntervalSince(now) < 3 * 3600
+            return locked || recent ? .retryLater : .ignored
         }
         // FirebaseAuth restores the signed-in user synchronously from disk, so
         // this works before any listener/observer has started.

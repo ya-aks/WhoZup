@@ -231,6 +231,14 @@ final class RTAlarmSync {
     /// app was closed still get cleaned up.
     func reconcile() async {
         guard let repository else { return }
+        // Never reconcile against a list that is still loading. On a cold launch
+        // (a Stop that opens the app does exactly this) `groups` starts empty, and
+        // reconciling then cancelled every alarm and deleted the records the Stop
+        // was about to read: the response was dropped and no routine started.
+        guard repository.alarmDataReady else {
+            RoutineLog.add("Reconcile skipped: groups still loading")
+            return
+        }
 
         let desired = Self.desiredAlarms(for: repository.groups)
         let existing = (try? scheduler.existingSlots()) ?? []

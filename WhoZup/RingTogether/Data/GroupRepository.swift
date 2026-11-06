@@ -26,6 +26,19 @@ final class GroupRepository {
     /// Live UI groups, rebuilt whenever any underlying document changes.
     private(set) var groups: [RTGroup] = []
     private(set) var isLoading = false
+    /// The groups listener has delivered a real answer (from the server, or a
+    /// non-empty cache). Until then `groups` is empty only because nothing has
+    /// loaded, not because you're in no groups.
+    private var groupsLoaded = false
+
+    /// Whether `groups` is complete enough to decide which alarms should exist:
+    /// the group list has loaded and every group's member docs (where a
+    /// Check-ins member keeps their own alarm time and habit) have arrived.
+    /// Alarm reconcile waits for this; reconciling against a half-loaded list
+    /// cancels every alarm it can't see yet and deletes the records a Stop needs.
+    var alarmDataReady: Bool {
+        groupsLoaded && rawGroups.keys.allSatisfy { members[$0] != nil }
+    }
     private(set) var lastError: String?
 
     /// True when one or more of your own status responses were recorded locally
@@ -152,6 +165,7 @@ final class GroupRepository {
         eventPackBalance = 0
         eventsLifetime = false
         usageLoaded = false; usageDocExists = false; seedingUsage = false
+        groupsLoaded = false
         currentUid = nil
     }
 
@@ -178,6 +192,8 @@ final class GroupRepository {
             return
         }
         guard let snapshot else { return }
+        // An empty answer straight from an empty cache isn't "no groups".
+        if !snapshot.metadata.isFromCache || !snapshot.documents.isEmpty { groupsLoaded = true }
 
         let decoded = snapshot.documents.compactMap { try? $0.data(as: FirestoreGroup.self) }
         let liveIDs = Set(decoded.compactMap(\.id))
